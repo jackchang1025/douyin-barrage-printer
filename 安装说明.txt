@@ -1,0 +1,63 @@
+抖音弹幕打印系统 - 安装说明
+
+========================================
+📦 安装步骤
+========================================
+
+1. 安装 Node.js
+   - 访问 https://nodejs.org/
+   - 下载并安装 Node.js 18.x 或更高版本
+   - 验证安装：打开命令行输入 `node -v`
+
+2. 安装 pnpm（推荐）
+   - 打开命令行输入：npm install -g pnpm
+   - 验证安装：pnpm -v
+
+3. 安装项目依赖
+   - 打开命令行
+   - 进入项目目录：cd D:\home\code\douyin
+   - 执行：pnpm install
+   - 等待安装完成（首次安装约 5-10 分钟）
+
+========================================
+🚀 运行项目
+========================================
+
+开发模式：
+   pnpm run electron:dev
+
+构建打包：
+   pnpm run electron:build:win  （Windows）
+   pnpm run electron:build:mac  （macOS）
+
+========================================
+⚠️ 常见问题
+========================================
+
+问题 1: better-sqlite3 安装失败
+解决：
+   npm install --global --production windows-build-tools
+   pnpm install --force
+
+问题 2: Electron 下载慢
+解决：
+   设置淘宝镜像：
+   npm config set electron_mirror https://npmmirror.com/mirrors/electron/
+
+问题 3: 窗口白屏
+解决：
+   1. 确认 Vite 开发服务器已启动（http://localhost:5173）
+   2. 打开开发者工具查看错误（F12）
+   3. 重启应用
+
+========================================
+📚 更多帮助
+========================================
+
+详细文档：README.md
+技术文档：docs/抖音弹幕打印SaaS系统技术文档.md
+项目说明：项目说明.md
+
+========================================
+© 2025 抖音弹幕打印系统
+

@@ -42,7 +42,8 @@
         "src/**/*.d.ts",
         "src/**/*.tsx",
         "src/**/*.vue",
-        "electron/**/*.ts"
+        "electron/**/*.ts",
+        "test-printer.ts"
     ],
     "exclude": [
         "node_modules",

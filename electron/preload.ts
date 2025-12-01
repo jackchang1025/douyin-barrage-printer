@@ -159,27 +159,107 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ==================== 打印机相关 ====================
 
     /**
-     * 获取打印机列表
+     * 获取所有可用打印机列表（包括 USB 和系统打印机）
      */
     getPrinters: () => ipcRenderer.invoke('printer:getList'),
 
     /**
-     * 连接打印机
+     * 获取 USB 打印机列表
      */
-    connectPrinter: (printerName: string) =>
-        ipcRenderer.invoke('printer:connect', printerName),
+    getUSBPrinters: () => ipcRenderer.invoke('printer:getUSBList'),
 
     /**
-     * 断开打印机
+     * 连接打印机
+     * @param printerName 打印机名称
+     * @param options 连接选项
+     */
+    connectPrinter: (printerName: string, options?: {
+        type?: 'usb' | 'network' | 'system'
+        vendorId?: number
+        productId?: number
+        address?: string
+        port?: number
+    }) => ipcRenderer.invoke('printer:connect', printerName, options),
+
+    /**
+     * 连接 USB 打印机
+     * @param vendorId USB 厂商 ID
+     * @param productId USB 产品 ID
+     */
+    connectUSBPrinter: (vendorId?: number, productId?: number) =>
+        ipcRenderer.invoke('printer:connectUSB', vendorId, productId),
+
+    /**
+     * 连接网络打印机
+     * @param address IP 地址
+     * @param port 端口号（默认 9100）
+     */
+    connectNetworkPrinter: (address: string, port?: number) =>
+        ipcRenderer.invoke('printer:connectNetwork', address, port),
+
+    /**
+     * 断开打印机连接
      */
     disconnectPrinter: () =>
         ipcRenderer.invoke('printer:disconnect'),
 
     /**
-     * 打印文本
+     * 获取打印机状态
      */
-    printText: (text: string, options?: any) =>
-        ipcRenderer.invoke('printer:printText', text, options),
+    getPrinterStatus: () =>
+        ipcRenderer.invoke('printer:getStatus'),
+
+    /**
+     * 检查打印机是否已连接
+     */
+    isPrinterConnected: () =>
+        ipcRenderer.invoke('printer:isConnected'),
+
+    /**
+     * 打印文本
+     * @param text 要打印的文本
+     * @param options 打印选项
+     */
+    printText: (text: string, options?: {
+        fontSize?: 1 | 2 | 3
+        bold?: boolean
+        align?: 'left' | 'center' | 'right'
+        cut?: boolean
+    }) => ipcRenderer.invoke('printer:printText', text, options),
+
+    /**
+     * 打印弹幕
+     * @param barrage 弹幕数据
+     * @param options 打印选项
+     */
+    printBarrage: (barrage: {
+        id?: number
+        nickname: string
+        content: string
+        type: 'text' | 'gift' | 'like' | 'follow' | 'share'
+        giftName?: string
+        giftCount?: number
+        timestamp?: number
+    }, options?: {
+        header?: string
+        footer?: string
+        fontSize?: 1 | 2 | 3
+        fields?: any[]  // 模板字段
+        paperWidth?: number  // 纸张宽度 (mm)
+        paperHeight?: number  // 纸张高度 (mm)
+    }) => ipcRenderer.invoke('printer:printBarrage', barrage, options),
+
+    /**
+     * 添加弹幕到打印队列
+     */
+    addBarrageToPrintQueue: (barrage: any) =>
+        ipcRenderer.invoke('printer:addToQueue', barrage),
+
+    /**
+     * 清空打印队列
+     */
+    clearPrintQueue: () =>
+        ipcRenderer.invoke('printer:clearQueue'),
 
     /**
      * 打印测试页

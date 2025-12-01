@@ -38,9 +38,17 @@ export interface ElectronAPI {
 
   // 打印机
   getPrinters: () => Promise<Printer[]>
-  connectPrinter: (printerName: string) => Promise<any>
+  getUSBPrinters: () => Promise<Printer[]>
+  connectPrinter: (printerName: string, options?: PrinterConnectOptions) => Promise<any>
+  connectUSBPrinter: (vendorId?: number, productId?: number) => Promise<any>
+  connectNetworkPrinter: (address: string, port?: number) => Promise<any>
   disconnectPrinter: () => Promise<any>
-  printText: (text: string, options?: any) => Promise<any>
+  getPrinterStatus: () => Promise<{ status: PrinterStatus; printer: Printer | null; queueLength: number }>
+  isPrinterConnected: () => Promise<boolean>
+  printText: (text: string, options?: PrintOptions) => Promise<any>
+  printBarrage: (barrage: BarragePrintData, options?: { header?: string; footer?: string; fontSize?: 1 | 2 | 3; fields?: any[]; paperWidth?: number; paperHeight?: number }) => Promise<any>
+  addBarrageToPrintQueue: (barrage: BarragePrintData) => Promise<{ success: boolean; queueLength?: number; message?: string }>
+  clearPrintQueue: () => Promise<any>
   printTestPage: () => Promise<any>
 
   // 事件监听
@@ -129,14 +137,76 @@ export interface Statistics {
   unique_users: number
 }
 
+// 打印机连接类型
+export type PrinterConnectionType = 'usb' | 'network' | 'system'
+
+// 打印机状态
+export type PrinterStatus = 'disconnected' | 'connecting' | 'connected' | 'printing' | 'error'
+
 // 打印机
 export interface Printer {
   name: string
   displayName?: string
   description?: string
-  status?: number
+  type?: PrinterConnectionType
+  vendorId?: number
+  productId?: number
+  address?: string
+  port?: number
+  status?: PrinterStatus | number
   isDefault?: boolean
   options?: any
+}
+
+// 打印选项
+export interface PrintOptions {
+  fontSize?: 1 | 2 | 3
+  bold?: boolean
+  align?: 'left' | 'center' | 'right'
+  cut?: boolean
+  encoding?: string
+  lineSpacing?: number
+}
+
+// 弹幕打印数据
+export interface BarragePrintData {
+  id?: number
+  nickname: string
+  content: string
+  type: 'text' | 'gift' | 'like' | 'follow' | 'share'
+  giftName?: string
+  giftCount?: number
+  timestamp?: number
+}
+
+// 打印机连接选项
+export interface PrinterConnectOptions {
+  type?: PrinterConnectionType
+  vendorId?: number
+  productId?: number
+  address?: string
+  port?: number
+}
+
+// 打印模板字段
+export interface PrintTemplateField {
+  id: string
+  label: string
+  visible: boolean
+  // 布局信息 (基于 12 列网格)
+  x: number
+  y: number
+  w: number
+  h: number
+  i: string // 唯一标识符，通常等于 id
+  style?: {
+    fontSize?: 1 | 2 | 3
+    bold?: boolean
+    align?: 'left' | 'center' | 'right'
+    lineBefore?: boolean
+    lineAfter?: boolean
+  }
+  customText?: string
 }
 
 // 打印设置
@@ -151,6 +221,7 @@ export interface PrintSettings {
   template_header: string
   template_footer: string
   queue_max_size: number
+  template_fields?: PrintTemplateField[]
 }
 
 // 用户

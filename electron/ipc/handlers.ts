@@ -5,6 +5,7 @@ import Store from 'electron-store'
 import { douyinLoginWindow } from '../douyin/login-window'
 import { cookieManager } from '../douyin/cookie-manager'
 import { liveMonitor, type BarrageData } from '../douyin/live-monitor'
+import { printerService, type PrintOptions, type BarragePrintData } from '../printer'
 
 const store = new Store()
 
@@ -258,7 +259,7 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
     // - douyin:getMonitoringStatus
     // - douyin:showLiveWindow
     // - douyin:hideLiveWindow
-    
+
     /**
      * ⚠️ 已弃用：旧版本的监控处理器（已移至 LiveMonitor 类内部）
      * 保留注释作为参考
@@ -291,12 +292,13 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
 
     // ==================== 打印机相关 ====================
 
+    /**
+     * 获取打印机列表（包括 USB 和系统打印机）
+     */
     ipcMain.handle('printer:getList', async () => {
-        const { webContents } = BrowserWindow.getFocusedWindow() || {}
-        if (!webContents) return []
-
         try {
-            const printers = await webContents.getPrintersAsync()
+            const printers = await printerService.getAllPrinters()
+            console.log('📋 获取打印机列表:', printers.length, '台')
             return printers
         } catch (error) {
             console.error('获取打印机列表失败:', error)
@@ -304,35 +306,223 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
         }
     })
 
-    ipcMain.handle('printer:connect', async (_event, printerName) => {
-        // TODO: 实现 ESC/POS 打印机连接
-        console.log('连接打印机:', printerName)
-        store.set('current_printer', printerName)
-        return { success: true }
+    /**
+     * 获取 USB 打印机列表
+     */
+    ipcMain.handle('printer:getUSBList', async () => {
+        try {
+            const printers = await printerService.getUSBPrinters()
+            return printers
+        } catch (error) {
+            console.error('获取 USB 打印机列表失败:', error)
+            return []
+        }
     })
 
+    /**
+     * 连接打印机
+     */
+    ipcMain.handle('printer:connect', async (_event, printerName: string, options?: {
+        type?: 'usb' | 'network' | 'system'
+        vendorId?: number
+        productId?: number
+        address?: string
+        port?: number
+    }) => {
+        try {
+            console.log('🔌 连接打印机:', printerName, options)
+
+            const type = options?.type || 'system'
+
+            switch (type) {
+                case 'usb':
+                    await printerService.connectUSB(options?.vendorId, options?.productId)
+                    break
+                case 'network':
+                    if (!options?.address) {
+                        throw new Error('网络打印机需要提供 IP 地址')
+                    }
+                    await printerService.connectNetwork(options.address, options.port || 9100)
+                    break
+                case 'system':
+                default:
+                    await printerService.connectSystem(printerName)
+                    break
+            }
+
+            // 保存当前打印机配置
+            store.set('current_printer', printerName)
+            store.set('printer_config', { printerName, ...options })
+
+            console.log('✅ 打印机连接成功')
+            return { success: true, message: '打印机连接成功' }
+        } catch (error: any) {
+            console.error('❌ 连接打印机失败:', error)
+            return { success: false, message: error.message || '连接失败' }
+        }
+    })
+
+    /**
+     * 连接 USB 打印机
+     */
+    ipcMain.handle('printer:connectUSB', async (_event, vendorId?: number, productId?: number) => {
+        try {
+            await printerService.connectUSB(vendorId, productId)
+            return { success: true, message: 'USB 打印机连接成功' }
+        } catch (error: any) {
+            console.error('USB 打印机连接失败:', error)
+            return { success: false, message: error.message || '连接失败' }
+        }
+    })
+
+    /**
+     * 连接网络打印机
+     */
+    ipcMain.handle('printer:connectNetwork', async (_event, address: string, port?: number) => {
+        try {
+            await printerService.connectNetwork(address, port || 9100)
+            return { success: true, message: '网络打印机连接成功' }
+        } catch (error: any) {
+            console.error('网络打印机连接失败:', error)
+            return { success: false, message: error.message || '连接失败' }
+        }
+    })
+
+    /**
+     * 断开打印机连接
+     */
     ipcMain.handle('printer:disconnect', async () => {
-        // TODO: 断开打印机连接
-        store.delete('current_printer')
+        try {
+            await printerService.disconnect()
+            store.delete('current_printer')
+            store.delete('printer_config')
+            console.log('🔌 打印机已断开')
+            return { success: true, message: '已断开连接' }
+        } catch (error: any) {
+            console.error('断开打印机失败:', error)
+            return { success: false, message: error.message || '断开失败' }
+        }
+    })
+
+    /**
+     * 获取打印机状态
+     */
+    ipcMain.handle('printer:getStatus', async () => {
+        const status = printerService.getStatus()
+        return {
+            ...status,
+            queueLength: printerService.getQueueLength()
+        }
+    })
+
+    /**
+     * 打印文本
+     */
+    ipcMain.handle('printer:printText', async (_event, text: string, options?: PrintOptions) => {
+        try {
+            console.log('🖨️ 打印文本:', text.substring(0, 50) + '...')
+            await printerService.printText(text, options)
+
+            // 通知渲染进程打印完成
+            BrowserWindow.getAllWindows().forEach(window => {
+                window.webContents.send('print:completed', { success: true })
+            })
+
+            return { success: true, message: '打印成功' }
+        } catch (error: any) {
+            console.error('❌ 打印失败:', error)
+
+            // 通知渲染进程打印错误
+            BrowserWindow.getAllWindows().forEach(window => {
+                window.webContents.send('print:error', { message: error.message })
+            })
+
+            return { success: false, message: error.message || '打印失败' }
+        }
+    })
+
+    /**
+     * 打印弹幕
+     */
+    ipcMain.handle('printer:printBarrage', async (_event, barrage: BarragePrintData, options?: {
+        header?: string
+        footer?: string
+        fontSize?: 1 | 2 | 3
+        fields?: any[]
+        paperWidth?: number
+        paperHeight?: number
+    }) => {
+        try {
+            console.log('🖨️ 打印弹幕:', barrage.nickname, barrage.content?.substring(0, 20))
+            console.log('   选项:', {
+                hasFields: !!(options?.fields?.length),
+                fieldsCount: options?.fields?.length || 0,
+                paperWidth: options?.paperWidth,
+                paperHeight: options?.paperHeight
+            })
+
+            const printSettings = sqliteManager.getPrintSettings()
+
+            // 优先使用传入的 fields，否则使用保存的模板
+            const fields = options?.fields || printSettings?.template_fields
+            const paperWidth = options?.paperWidth || 40
+            const paperHeight = options?.paperHeight || 30
+
+            await printerService.printBarrage(barrage, {
+                header: options?.header || printSettings?.template_header,
+                footer: options?.footer || printSettings?.template_footer,
+                fontSize: options?.fontSize || printSettings?.print_font_size || 1,
+                fields: fields,
+                paperWidth: paperWidth,
+                paperHeight: paperHeight
+            })
+
+            return { success: true, message: '打印成功' }
+        } catch (error: any) {
+            console.error('❌ 打印弹幕失败:', error)
+            return { success: false, message: error.message || '打印失败' }
+        }
+    })
+
+    /**
+     * 添加弹幕到打印队列
+     */
+    ipcMain.handle('printer:addToQueue', async (_event, barrage: BarragePrintData) => {
+        try {
+            printerService.addToQueue(barrage)
+            return { success: true, queueLength: printerService.getQueueLength() }
+        } catch (error: any) {
+            return { success: false, message: error.message }
+        }
+    })
+
+    /**
+     * 清空打印队列
+     */
+    ipcMain.handle('printer:clearQueue', async () => {
+        printerService.clearQueue()
         return { success: true }
     })
 
-    ipcMain.handle('printer:printText', async (_event, text, options) => {
-        // TODO: 实现实际打印逻辑
-        console.log('打印文本:', text, options)
-
-        // 模拟打印
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve({ success: true })
-            }, 500)
-        })
-    })
-
+    /**
+     * 打印测试页
+     */
     ipcMain.handle('printer:printTestPage', async () => {
-        // TODO: 打印测试页
-        console.log('打印测试页')
-        return { success: true }
+        try {
+            console.log('🖨️ 打印测试页')
+            await printerService.printTestPage()
+            return { success: true, message: '测试页已发送' }
+        } catch (error: any) {
+            console.error('❌ 打印测试页失败:', error)
+            return { success: false, message: error.message || '打印失败' }
+        }
+    })
+
+    /**
+     * 检查打印机是否已连接
+     */
+    ipcMain.handle('printer:isConnected', async () => {
+        return printerService.isConnected()
     })
 
     // ==================== 心跳检测相关 ====================

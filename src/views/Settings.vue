@@ -13,6 +13,11 @@
           <DouyinAccount />
         </el-tab-pane>
 
+        <!-- 打印模板设置 (新) -->
+        <el-tab-pane label="打印模板">
+          <PrintTemplateSettings />
+        </el-tab-pane>
+
         <!-- 打印机设置 -->
         <el-tab-pane label="打印机设置">
           <el-form :model="printerStore.settings" label-width="120px">
@@ -34,34 +39,37 @@
               </el-button>
             </el-form-item>
 
+            <el-form-item label="连接方式">
+              <el-radio-group v-model="printerStore.settings.connection_type">
+                <el-radio-button label="system">系统驱动</el-radio-button>
+                <el-radio-button label="usb">USB直连</el-radio-button>
+                <el-radio-button label="network">网络打印机</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <!-- 网络打印机配置 -->
+            <template v-if="printerStore.settings.connection_type === 'network'">
+              <el-form-item label="IP 地址">
+                <el-input v-model="printerStore.settings.network_address" style="width: 200px" />
+              </el-form-item>
+              <el-form-item label="端口">
+                <el-input-number v-model="printerStore.settings.network_port" :min="1" :max="65535" />
+              </el-form-item>
+            </template>
+
             <el-form-item label="自动打印">
               <el-switch v-model="printerStore.settings.auto_print" />
             </el-form-item>
 
-            <el-form-item label="字体大小">
+            <el-form-item label="全局字号">
               <el-slider
                 v-model="printerStore.settings.print_font_size"
                 :min="1"
-                :max="4"
-                :marks="{ 1: '小', 2: '中', 3: '大', 4: '特大' }"
+                :max="3"
+                :marks="{ 1: '小', 2: '中', 3: '大' }"
                 style="width: 300px"
               />
-            </el-form-item>
-
-            <el-form-item label="打印头部">
-              <el-input
-                v-model="printerStore.settings.template_header"
-                placeholder="打印头部文本"
-                style="width: 300px"
-              />
-            </el-form-item>
-
-            <el-form-item label="打印尾部">
-              <el-input
-                v-model="printerStore.settings.template_footer"
-                placeholder="打印尾部文本"
-                style="width: 300px"
-              />
+              <div class="form-tip">模板中的字段字号设置优先级高于此全局设置</div>
             </el-form-item>
 
             <el-form-item>
@@ -158,6 +166,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { usePrinterStore } from '@/stores/printer'
 import DouyinAccount from '@/components/DouyinAccount.vue'
+import PrintTemplateSettings from '@/components/PrintTemplateSettings.vue'
 
 const router = useRouter()
 const printerStore = usePrinterStore()
@@ -198,11 +207,42 @@ const handleRemoveKeyword = (index: number) => {
 
 <style scoped>
 .settings-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   padding: 20px;
+  box-sizing: border-box;
+  background: var(--el-bg-color);
 }
 
 .content {
+  flex: 1;
   margin-top: 20px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content :deep(.el-tabs) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.content :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content :deep(.el-tab-pane) {
+  height: 100%;
+  overflow: auto;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 </style>
-

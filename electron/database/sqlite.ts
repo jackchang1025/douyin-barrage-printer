@@ -1,12 +1,14 @@
 // 临时内存数据库版本（用于测试，避免 better-sqlite3 编译问题）
 import { app } from 'electron'
 import path from 'path'
+import Store from 'electron-store'
 
 /**
- * SQLite 数据库管理器（内存模拟版本）
+ * SQLite 数据库管理器（内存模拟版本 + 持久化存储）
  */
 export class SQLiteManager {
   private dbPath: string
+  private store: Store
   private memoryData: {
     barrages: any[]
     printQueue: any[]
@@ -18,6 +20,14 @@ export class SQLiteManager {
     const userDataPath = app.getPath('userData')
     this.dbPath = path.join(userDataPath, 'douyin_barrage.db')
     console.log('📁 数据库路径(内存模式):', this.dbPath)
+
+    // 初始化 electron-store 用于持久化配置
+    this.store = new Store({
+      name: 'douyin-print-settings',
+      defaults: {
+        printSettings: {}
+      }
+    })
 
     // 初始化内存数据
     this.memoryData = {
@@ -32,6 +42,7 @@ export class SQLiteManager {
 
   private init() {
     console.log('✅ 使用内存数据库模式（测试版本）')
+    console.log('💾 打印配置持久化存储路径:', this.store.path)
     this.initDefaultSettings()
   }
 
@@ -128,6 +139,16 @@ export class SQLiteManager {
   }
 
   getPrintSettings(): any {
+    // 优先从持久化存储读取
+    const persistedSettings = this.store.get('printSettings', {}) as any
+    
+    // 如果持久化存储有数据，直接返回
+    if (Object.keys(persistedSettings).length > 0) {
+      console.log('📂 从持久化存储加载打印配置')
+      return persistedSettings
+    }
+
+    // 否则从内存数据读取（兼容旧逻辑）
     const settings: any = {}
     for (const row of this.memoryData.printSettings) {
       let value = row.setting_value
@@ -152,6 +173,11 @@ export class SQLiteManager {
   }
 
   savePrintSettings(settings: any): void {
+    // 保存到持久化存储
+    this.store.set('printSettings', settings)
+    console.log('💾 打印配置已保存到持久化存储:', this.store.path)
+
+    // 同时更新内存数据（保持兼容）
     const now = Date.now()
     for (const [key, value] of Object.entries(settings)) {
       let strValue: string
@@ -171,11 +197,20 @@ export class SQLiteManager {
         dataType = 'string'
       }
 
-      const existing = this.memoryData.printSettings.find(s => s.setting_key === key)
+      let existing = this.memoryData.printSettings.find(s => s.setting_key === key)
       if (existing) {
         existing.setting_value = strValue
         existing.data_type = dataType
         existing.updated_at = now
+      } else {
+        // 如果不存在，创建新记录
+        this.memoryData.printSettings.push({
+          id: this.memoryData.printSettings.length + 1,
+          setting_key: key,
+          setting_value: strValue,
+          data_type: dataType,
+          updated_at: now
+        })
       }
     }
   }
@@ -212,6 +247,13 @@ export class SQLiteManager {
 
   getDbPath(): string {
     return this.dbPath
+  }
+
+  /**
+   * 获取打印配置的持久化存储路径
+   */
+  getPrintSettingsPath(): string {
+    return this.store.path
   }
 
   close(): void {

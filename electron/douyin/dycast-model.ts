@@ -11067,89 +11067,176 @@ function _decodeTopFan(bb: ByteBuffer): TopFan {
   return message;
 }
 
+/**
+ * 抖音用户信息接口
+ * 包含用户在直播间的所有相关信息
+ */
 export interface User {
+  /** 用户唯一标识ID（长ID，字符串格式） */
   id?: string;
+  /** 抖音号（短ID，数字形式，如 123456789） */
   shortId?: string;
+  /** 用户昵称 */
   nickname?: string;
+  /** 性别：0-未知，1-男，2-女 */
   gender?: number;
+  /** 个人简介/签名 */
   signature?: string;
+  /** 用户等级 */
   level?: number;
+  /** 生日（时间戳字符串） */
   birthday?: string;
+  /** 电话号码（通常为空，隐私保护） */
   telephone?: string;
+  /** 头像缩略图 */
   avatarThumb?: Image;
+  /** 头像中等尺寸 */
   avatarMedium?: Image;
+  /** 头像大尺寸 */
   avatarLarge?: Image;
+  /** 是否认证用户（蓝V/黄V） */
   verified?: boolean;
+  /** 经验值 */
   experience?: number;
+  /** 所在城市 */
   city?: string;
+  /** 用户状态 */
   status?: number;
+  /** 账号创建时间（时间戳字符串） */
   createTime?: string;
+  /** 最后修改时间（时间戳字符串） */
   modifyTime?: string;
+  /** 隐私设置（0-公开，1-私密） */
   secret?: number;
+  /** 分享二维码URI */
   shareQrcodeUri?: string;
+  /** 收入分成比例（百分比） */
   incomeSharePercent?: number;
+  /** 徽章图片列表 */
   badgeImageList?: Image;
+  /** 关注信息（关注状态、粉丝数等） */
   followInfo?: User_FollowInfo;
+  /** 付费等级信息（会员等级、消费等级等） */
   payGrade?: User_PayGrade;
+  /** 粉丝团信息（灯牌等级、加入时间等） */
   fansClub?: User_FansClub;
+  /** 头像边框信息 */
   border?: User_Border;
+  /** 特殊ID（可能是活动ID或其他特殊标识） */
   specialId?: string;
+  /** 头像边框图片 */
   avatarBorder?: Image;
+  /** 勋章图片 */
   medal?: Image;
+  /** 实时图标列表（如在线状态、活动标识等） */
   realTimeIcons?: Image[];
+  /** 新版实时图标列表 */
   newRealTimeIcons?: Image[];
+  /** 顶级VIP编号 */
   topVipNo?: string;
+  /** 用户属性信息 */
   userAttr?: User_UserAttr;
+  /** 用户拥有的直播间信息 */
   ownRoom?: User_OwnRoom;
+  /** 付费积分 */
   payScore?: string;
+  /** 票数（粉丝票数量） */
   ticketCount?: string;
+  /** 主播信息（如果是主播） */
   anchorInfo?: User_AnchorInfo;
+  /** 连麦统计 */
   linkMicStats?: number;
+  /** 抖音号（显示ID，可自定义的字符串形式，如 user_abc123） */
   displayId?: string;
+  /** 是否有电商权限 */
   withCommercePermission?: boolean;
+  /** 是否有融合店铺入口 */
   withFusionShopEntry?: boolean;
+  /** 累计充值抖币数量 */
   totalRechargeDiamondCount?: string;
+  /** 直播主播等级 */
   webcastAnchorLevel?: User_AnchorLevel;
+  /** 认证内容说明 */
   verifiedContent?: string;
+  /** 作者统计数据（粉丝数、获赞数等） */
   authorStats?: User_AuthorStats;
+  /** 顶级粉丝信息（如果是顶级粉丝） */
   topFans?: User;
+  /** 安全用户ID（加密后的用户ID） */
   secUid?: string;
+  /** 用户角色（0-普通用户，1-主播等） */
   userRole?: number;
+  /** 西瓜视频相关信息 */
   xiguaInfo?: User_XiguaParams;
+  /** 活动奖励信息 */
   activityReward?: User_ActivityInfo;
+  /** 贵族等级信息 */
   nobleInfo?: User_NobleLevelInfo;
+  /** 兄弟会信息（可能是公会/家族信息） */
   brotherhoodInfo?: User_BrotherhoodInfo;
+  /** 个人名片图片 */
   personalCard?: Image;
+  /** 认证信息详情 */
   authenticationInfo?: User_AuthenticationInfo;
+  /** 授权信息 */
   authorizationInfo?: number;
+  /** 对手授权信息（PK相关） */
   adversaryAuthorizationInfo?: number;
+  /** 位置信息（POI - Point of Interest） */
   poiInfo?: User_PoiInfo;
+  /** 媒体徽章图片列表（V2版本） */
   mediaBadgeImageList?: Image;
+  /** 对手用户状态（PK相关） */
   adversaryUserStatus?: number;
+  /** 用户VIP信息 */
   userVipInfo?: UserVIPInfo;
+  /** 电商直播配置ID */
   commerceWebcastConfigIds?: string;
+  /** 徽章图片列表（V2版本） */
   badgeImageListV2?: Image;
+  /** 行业认证信息 */
   industryCertification?: IndustryCertification;
+  /** 定位城市 */
   locationCity?: string;
+  /** 粉丝群信息 */
   fansGroupInfo?: User_FansGroupInfo;
+  /** 备注名称 */
   remarkName?: string;
+  /** 神秘人标识（可能是匿名或特殊身份） */
   mysteryMan?: number;
+  /** Web房间ID */
   webRid?: string;
+  /** 脱敏后的昵称（隐私保护） */
   desensitizedNickname?: string;
+  /** J授权信息 */
   jAccreditInfo?: User_JAccreditInfo;
+  /** 订阅信息 */
   subscribe?: User_Subscribe;
+  /** 是否为匿名用户 */
   isAnonymous?: boolean;
+  /** 消费抖币等级 */
   consumeDiamondLevel?: number;
+  /** 直播用户ID */
   webcastUid?: string;
+  /** 个人资料样式参数 */
   profileStyleParams?: User_ProfileStyleParams;
+  /** 用户装扮信息 */
   userDressInfo?: User_UserDressInfo;
+  /** 商业关系信息 */
   bizRelation?: User_BizRelation;
+  /** 会员入口信息 */
   memberEntranceInfo?: MemberEntranceInfo;
+  /** 公屏区域徽章信息 */
   publicAreaBadgeInfo?: User_PublicAreaBadgeInfo;
+  /** 额外信息 */
   extraInfo?: User_ExtraInfo;
+  /** 用户设置信息 */
   userSettingInfo?: User_UserSettingInfo;
+  /** 公屏操作频率 */
   publicAreaOperFreq?: string;
+  /** 用户权限授予信息 */
   userPermissionGrantInfo?: User_UserPermissionGrant;
+  /** 用户是否已注销 */
   userCanceled?: boolean;
 }
 

@@ -1,0 +1,5 @@
+# 开发环境更新配置（仅用于测试）
+# 生产环境配置在 package.json 的 build.publish 中
+provider: generic
+url: http://localhost:8080/releases/
+

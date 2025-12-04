@@ -48,10 +48,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('db:markAsPrinted', barrageId),
 
     /**
-     * 获取统计数据
+     * 更新弹幕用户编号
      */
-    getStatistics: (roomId?: string) =>
-        ipcRenderer.invoke('db:getStatistics', roomId),
+    updateBarrageUserNo: (barrageId: number, userNo: number) =>
+        ipcRenderer.invoke('db:updateBarrageUserNo', barrageId, userNo),
+
+    /**
+     * 获取统计数据（支持筛选参数）
+     */
+    getStatistics: (options?: {
+        roomId?: string
+        type?: string
+        nickname?: string
+        keyword?: string
+        startTime?: number
+        endTime?: number
+        isPrinted?: boolean
+    }) => ipcRenderer.invoke('db:getStatistics', options),
 
     /**
      * 获取打印配置
@@ -81,6 +94,109 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     cleanOldData: (days: number) =>
         ipcRenderer.invoke('db:cleanOldData', days),
+
+    /**
+     * 高级弹幕查询（支持筛选、分页）
+     */
+    queryBarrages: (options: {
+        roomId?: string
+        type?: string
+        nickname?: string
+        keyword?: string
+        startTime?: number
+        endTime?: number
+        isPrinted?: boolean
+        page?: number
+        pageSize?: number
+        orderBy?: 'created_at' | 'gift_value'
+        orderDir?: 'ASC' | 'DESC'
+    }) => ipcRenderer.invoke('db:queryBarrages', options),
+
+    /**
+     * 获取弹幕类型统计（支持筛选参数）
+     */
+    getBarrageTypeStats: (options?: {
+        roomId?: string
+        nickname?: string
+        keyword?: string
+        startTime?: number
+        endTime?: number
+        isPrinted?: boolean
+    }) => ipcRenderer.invoke('db:getBarrageTypeStats', options),
+
+    /**
+     * 获取用户排行榜（支持筛选参数）
+     */
+    getUserRanking: (options: {
+        roomId?: string
+        type?: string
+        keyword?: string
+        startTime?: number
+        endTime?: number
+        isPrinted?: boolean
+        limit?: number
+        orderBy?: 'barrage_count' | 'gift_value'
+    }) => ipcRenderer.invoke('db:getUserRanking', options),
+
+    /**
+     * 导出弹幕数据
+     */
+    exportBarrages: (options: {
+        roomId?: string
+        type?: string
+        startTime?: number
+        endTime?: number
+    }) => ipcRenderer.invoke('db:exportBarrages', options),
+
+    /**
+     * 获取时间范围统计
+     */
+    getTimeRangeStats: (startTime: number, endTime: number, roomId?: string) =>
+        ipcRenderer.invoke('db:getTimeRangeStats', startTime, endTime, roomId),
+
+    /**
+     * 批量删除弹幕
+     */
+    deleteBarrages: (ids: number[]) =>
+        ipcRenderer.invoke('db:deleteBarrages', ids),
+
+    /**
+     * 删除所有弹幕
+     */
+    deleteAllBarrages: () =>
+        ipcRenderer.invoke('db:deleteAllBarrages'),
+
+    // ==================== 打印模板管理 ====================
+
+    /**
+     * 获取所有打印模板
+     */
+    getTemplates: () =>
+        ipcRenderer.invoke('template:getAll'),
+
+    /**
+     * 获取单个打印模板
+     */
+    getTemplate: (id: string) =>
+        ipcRenderer.invoke('template:get', id),
+
+    /**
+     * 保存打印模板（新增或更新）
+     */
+    saveTemplate: (template: any) =>
+        ipcRenderer.invoke('template:save', template),
+
+    /**
+     * 删除打印模板
+     */
+    deleteTemplate: (id: string) =>
+        ipcRenderer.invoke('template:delete', id),
+
+    /**
+     * 设置默认模板
+     */
+    setDefaultTemplate: (id: string) =>
+        ipcRenderer.invoke('template:setDefault', id),
 
     // ==================== 抖音相关 ====================
 
@@ -351,6 +467,77 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * 停止心跳检测
      */
     stopHeartbeat: () => ipcRenderer.invoke('system:stopHeartbeat'),
+
+    // ==================== 窗口管理相关 ====================
+
+    /**
+     * 打开直播监控窗口
+     */
+    openLiveRoomWindow: () => ipcRenderer.invoke('window:openLiveRoom'),
+
+    /**
+     * 关闭直播监控窗口
+     */
+    closeLiveRoomWindow: () => ipcRenderer.invoke('window:closeLiveRoom'),
+
+    /**
+     * 获取直播监控窗口状态
+     */
+    getLiveRoomWindowStatus: () => ipcRenderer.invoke('window:getLiveRoomStatus'),
+
+    /**
+     * 监听直播监控窗口关闭事件
+     */
+    onLiveRoomWindowClosed: (callback: () => void) => {
+        const subscription = () => callback()
+        ipcRenderer.on('liveRoom:windowClosed', subscription)
+        return () => {
+            ipcRenderer.removeListener('liveRoom:windowClosed', subscription)
+        }
+    },
+
+    // ==================== 自动更新相关 ====================
+
+    /**
+     * 检查更新
+     */
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+
+    /**
+     * 下载更新
+     */
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+
+    /**
+     * 安装更新并重启
+     */
+    installUpdate: () => ipcRenderer.invoke('updater:install'),
+
+    /**
+     * 获取更新状态
+     */
+    getUpdateStatus: () => ipcRenderer.invoke('updater:getStatus'),
+
+    /**
+     * 获取当前应用版本
+     */
+    getAppVersion: () => ipcRenderer.invoke('updater:getVersion'),
+
+    /**
+     * 监听更新状态变化
+     */
+    onUpdateStatus: (callback: (status: {
+        status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+        info?: any
+        progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+        error?: string
+    }) => void) => {
+        const subscription = (_event: any, status: any) => callback(status)
+        ipcRenderer.on('updater:status', subscription)
+        return () => {
+            ipcRenderer.removeListener('updater:status', subscription)
+        }
+    },
 })
 
 // 类型声明在 src/types/index.ts 中定义

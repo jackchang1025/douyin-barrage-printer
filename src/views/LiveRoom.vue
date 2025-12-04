@@ -1,290 +1,143 @@
 <template>
   <div class="live-room">
     <!-- 顶部标题栏 -->
-    <div class="header">
-      <div class="header-left">
-        <el-button text @click="router.back()">
-          <el-icon><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-        <span class="page-title">弹幕监控</span>
-      </div>
-      <div class="header-right">
-        <el-tag v-if="isMonitoring" type="success" effect="dark" size="large">
-          <el-icon><VideoCamera /></el-icon>
-          监控中
-        </el-tag>
-        <el-tag v-else type="info" size="large">
-          <el-icon><VideoPause /></el-icon>
-          未监控
-        </el-tag>
-      </div>
-    </div>
+    <LiveRoomHeader :is-monitoring="isMonitoring" />
 
     <div class="content">
       <!-- 左侧：控制面板 -->
-      <div class="left-panel">
-        <el-card class="control-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <span>🎯 监控设置</span>
-            </div>
-          </template>
+      <div class="left-panel custom-scrollbar">
+        <!-- 监控控制面板 -->
+        <MonitorControlPanel
+          v-model:room-url="roomUrl"
+          :is-monitoring="isMonitoring"
+          :window-visible="windowVisible"
+          :start-loading="startLoading"
+          :stop-loading="stopLoading"
+          @start="handleStart"
+          @stop="handleStop"
+          @toggle-window="toggleLiveWindow"
+        />
 
-          <!-- 登录提示 -->
-          <el-alert
-            v-if="!isLoggedIn"
-            type="warning"
-            :closable="false"
-            show-icon
-            style="margin-bottom: 16px"
-          >
-            请先登录抖音账号
-          </el-alert>
-
-          <!-- 直播间地址输入 -->
-          <div class="input-group">
-            <label class="input-label">直播间地址</label>
-            <el-input
-              v-model="roomUrl"
-              placeholder="https://live.douyin.com/123456789012 或 房间ID"
-              :disabled="isMonitoring"
-              size="large"
-              clearable
-            >
-              <template #prefix>
-                <el-icon><Link /></el-icon>
-              </template>
-            </el-input>
-            <div class="input-tip">
-              💡 支持多种格式：<br>
-              • https://live.douyin.com/房间号<br>
-              • https://www.douyin.com/follow/live/房间号<br>
-              • 纯数字房间号
-            </div>
-          </div>
-
-          <!-- 控制按钮 -->
-          <div class="control-buttons">
-            <el-button
-              v-if="!isMonitoring"
-              type="primary"
-              size="large"
-              :disabled="!roomUrl || !isLoggedIn"
-              :loading="startLoading"
-              @click="handleStart"
-              style="width: 100%"
-            >
-              <el-icon><VideoPlay /></el-icon>
-              开始监控
-            </el-button>
-            <el-button
-              v-else
-              type="danger"
-              size="large"
-              :loading="stopLoading"
-              @click="handleStop"
-              style="width: 100%"
-            >
-              <el-icon><VideoPause /></el-icon>
-              停止监控
-            </el-button>
-
-            <!-- 窗口控制按钮 -->
-            <el-button
-              v-if="isMonitoring"
-              :type="windowVisible ? 'info' : 'success'"
-              size="large"
-              @click="toggleLiveWindow"
-              style="width: 100%; margin-top: 8px"
-            >
-              <el-icon><View v-if="!windowVisible" /><Hide v-else /></el-icon>
-              {{ windowVisible ? '隐藏直播间窗口' : '显示直播间窗口' }}
-            </el-button>
-          </div>
-
-          <!-- 后台运行提示 -->
-          <el-alert
-            v-if="isMonitoring"
-            type="info"
-            :closable="false"
-            show-icon
-            style="margin-top: 16px"
-          >
-            <template #default>
-              <div style="font-size: 12px">
-                💡 关闭直播间窗口不会停止监控，<br>监控将继续在后台运行
-              </div>
-            </template>
-          </el-alert>
-        </el-card>
-
-        <!-- 统计信息卡片（只要有弹幕数据就显示） -->
-        <el-card v-if="isMonitoring || barrageStore.barrages.length > 0" class="stats-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <span>📊 {{ isMonitoring ? '实时统计' : '本次统计' }}</span>
-              <el-tag v-if="!isMonitoring" type="info" size="small" style="margin-left: 8px">已停止</el-tag>
-            </div>
-          </template>
-
-          <div class="stats-grid">
-            <div class="stat-item">
-              <div class="stat-value">{{ barrageStore.barrages.length }}</div>
-              <div class="stat-label">已收弹幕</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ giftCount }}</div>
-              <div class="stat-label">礼物数</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ formatDuration(monitoringDuration) }}</div>
-              <div class="stat-label">运行时长</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value">{{ printedCount }}</div>
-              <div class="stat-label">已打印</div>
-            </div>
-          </div>
-        </el-card>
+        <!-- 统计信息卡片 -->
+        <LiveRoomStats
+          :is-monitoring="isMonitoring"
+          :total-barrages="barrageStore.barrages.length"
+          :gift-count="giftCount"
+          :monitoring-duration="monitoringDuration"
+          :printed-count="printedCount"
+        />
       </div>
 
-      <!-- 右侧：弹幕流 -->
-      <div class="right-panel">
-        <div class="barrage-container">
-          <div class="barrage-header">
-            <span class="header-title">💬 弹幕信息</span>
-            <div class="header-actions">
-              <el-button size="small" text @click="clearBarrages">
-                <el-icon><Delete /></el-icon>
-                清空
-              </el-button>
-            </div>
-          </div>
+      <!-- 中间：弹幕流 -->
+      <div class="center-panel">
+        <div class="barrage-wrapper">
+          <!-- 弹幕列表 -->
+          <BarrageListPanel
+            :barrages="chatBarrages"
+            :is-monitoring="isMonitoring"
+            @clear="clearBarrages"
+            @print="handleManualPrint"
+            class="barrage-list-panel"
+          />
 
-          <!-- 聊天弹幕列表（可滚动） -->
-          <div ref="barrageContainer" class="barrage-list">
-            <!-- 空状态 -->
-            <div v-if="chatBarrages.length === 0" class="empty-state">
-              <el-icon :size="48" color="#909399"><ChatDotRound /></el-icon>
-              <div class="empty-text">
-                {{ isMonitoring ? '等待弹幕中...' : '开始监控后，弹幕将在这里显示' }}
-              </div>
-            </div>
-
-            <!-- 只显示聊天弹幕 -->
-            <div
-              v-for="barrage in chatBarrages"
-              :key="barrage.id"
-              class="barrage-item"
-            >
-              <div class="barrage-icon">
-                <el-icon color="#00d9ff">
-                  <ChatDotRound />
-                </el-icon>
-              </div>
-
-              <div class="barrage-content">
-                <div class="barrage-user">
-                  <span class="nickname">{{ barrage.nickname }}</span>
-                  <span class="time">{{ formatTime(barrage.timestamp) }}</span>
-                </div>
-                <div class="barrage-text">
-                  {{ barrage.content }}
-                </div>
-              </div>
-
-              <div class="barrage-status">
-                <el-icon v-if="barrage.is_printed" color="#67c23a">
-                  <CircleCheck />
-                </el-icon>
-                <el-icon v-else color="#e6a23c">
-                  <Clock />
-                </el-icon>
-              </div>
-            </div>
-          </div>
-
-          <!-- 底部通知栏（进入直播、礼物等，只显示最新一条） -->
-          <div v-if="latestNotification" class="notification-bar">
-            <div class="notification-content">
-              <!-- 礼物消息 -->
-              <template v-if="latestNotification.type === 'gift'">
-                <span class="notification-icon">🎁</span>
-                <span class="notification-user">{{ latestNotification.nickname }}</span>
-                <span class="notification-text">送出 {{ latestNotification.gift_name || '礼物' }}</span>
-                <span v-if="latestNotification.gift_count > 1" class="notification-count">x{{ latestNotification.gift_count }}</span>
-              </template>
-              <!-- 进入直播/关注 (type: 'follow' 或 'member' 或 'social') -->
-              <template v-else-if="latestNotification.type === 'follow' || latestNotification.type === 'member' || latestNotification.type === 'social'">
-                <span class="notification-icon">{{ latestNotification.content?.includes('关注') ? '❤️' : '👋' }}</span>
-                <span class="notification-user">{{ latestNotification.nickname }}</span>
-                <span class="notification-text">{{ latestNotification.content || '进入直播间' }}</span>
-              </template>
-              <!-- 点赞 -->
-              <template v-else-if="latestNotification.type === 'like'">
-                <span class="notification-icon">👍</span>
-                <span class="notification-user">{{ latestNotification.nickname }}</span>
-                <span class="notification-text">{{ latestNotification.content || '点赞了直播' }}</span>
-              </template>
-              <!-- 分享 -->
-              <template v-else-if="latestNotification.type === 'share'">
-                <span class="notification-icon">🔗</span>
-                <span class="notification-user">{{ latestNotification.nickname }}</span>
-                <span class="notification-text">分享了直播</span>
-              </template>
-              <!-- 其他通知 -->
-              <template v-else>
-                <span class="notification-icon">📢</span>
-                <span class="notification-user">{{ latestNotification.nickname }}</span>
-                <span class="notification-text">{{ latestNotification.content }}</span>
-              </template>
-            </div>
+          <!-- 底部通知栏（固定在底部，不遮挡弹幕） -->
+          <div class="notification-container">
+            <NotificationBar :notification="latestNotification" />
           </div>
         </div>
+      </div>
+
+      <!-- 右侧：打印设置 -->
+      <div class="right-panel custom-scrollbar">
+        <!-- 打印机选择器 -->
+        <PrinterSelector />
+        <!-- 模板选择器 -->
+        <TemplateSelector />
+        <!-- 打印过滤设置 -->
+        <FilterSettings :is-monitoring="isMonitoring" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import {
-  ArrowLeft,
-  Link,
-  VideoPlay,
-  VideoPause,
-  VideoCamera,
-  View,
-  Hide,
-  Delete,
-  ChatDotRound,
-  CircleCheck,
-  Clock,
-} from '@element-plus/icons-vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import LiveRoomHeader from '@/components/LiveRoom/LiveRoomHeader.vue'
+import MonitorControlPanel from '@/components/LiveRoom/MonitorControlPanel.vue'
+import LiveRoomStats from '@/components/LiveRoom/LiveRoomStats.vue'
+import BarrageListPanel from '@/components/LiveRoom/BarrageListPanel.vue'
+import NotificationBar from '@/components/LiveRoom/NotificationBar.vue'
+import FilterSettings from '@/components/FilterSettings.vue'
+import TemplateSelector from '@/components/LiveRoom/TemplateSelector.vue'
+import PrinterSelector from '@/components/LiveRoom/PrinterSelector.vue'
 import { useBarrageStore } from '@/stores/barrage'
-import { useAuthStore } from '@/stores/auth'
+import { usePrinterStore } from '@/stores/printer'
 
-const router = useRouter()
 const barrageStore = useBarrageStore()
-const authStore = useAuthStore()
+const printerStore = usePrinterStore()
 
-const roomUrl = ref('')
-const currentRoomId = ref('')
-const isMonitoring = ref(false)
-const windowVisible = ref(true) // 直播间窗口是否可见
-const startLoading = ref(false)
-const stopLoading = ref(false)
-const barrageContainer = ref<HTMLElement>()
-const monitoringStartTime = ref(0)
-const monitoringDuration = ref(0)
+// 状态变量 - 提供默认值避免 undefined 警告
+const roomUrl = ref<string>('')
+const currentRoomId = ref<string>('')
+const isMonitoring = ref<boolean>(false)
+const windowVisible = ref<boolean>(true)
+const startLoading = ref<boolean>(false)
+const stopLoading = ref<boolean>(false)
+const monitoringStartTime = ref<number>(0)
+const monitoringDuration = ref<number>(0)
 
-// 是否已登录抖音
-const isLoggedIn = computed(() => {
-  return !!authStore.user
-})
+// 用户编号映射表：key 为 display_id（字符串化），value 为用户编号
+// 注意：只有符合过滤规则的用户才会分配编号
+const userNumberMap = ref<Map<string, number>>(new Map())
+
+/**
+ * 获取已分配的用户编号（不会分配新编号）
+ * @param identifier 用户标识符
+ * @returns 已分配的用户编号，如果未分配则返回 undefined
+ */
+const getExistingUserNumber = (identifier: string | number | undefined | null): number | undefined => {
+  if (identifier === undefined || identifier === null || identifier === '') {
+    return undefined
+  }
+  const key = String(identifier)
+  return userNumberMap.value.get(key)
+}
+
+/**
+ * 为用户分配新编号（仅在需要打印时调用）
+ * @param identifier 用户标识符（display_id、user_id 或 nickname）
+ * @returns 分配的用户编号
+ */
+const assignUserNumber = (identifier: string | number | undefined | null): number => {
+  // 处理空值情况 - 使用随机 ID 确保每条弹幕都能分配编号
+  const key = (identifier === undefined || identifier === null || identifier === '') 
+    ? `anonymous_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    : String(identifier)
+  
+  // 如果已存在，直接返回
+  if (userNumberMap.value.has(key)) {
+    return userNumberMap.value.get(key)!
+  }
+  
+  // 获取起始值（默认 0）
+  const startValue = printerStore.settings.user_no_start ?? 0
+  
+  // 分配新编号：起始值 + 当前 Map 大小
+  const newNumber = startValue + userNumberMap.value.size
+  userNumberMap.value.set(key, newNumber)
+  
+  console.log(`👤 新用户编号分配: ${key} -> #${newNumber} (起始值: ${startValue}, 当前用户数: ${userNumberMap.value.size})`)
+  return newNumber
+}
+
+/**
+ * 重置用户编号映射表（开始新的监控时调用）
+ */
+const resetUserNumberMap = () => {
+  userNumberMap.value.clear()
+  console.log('🔄 用户编号映射表已重置')
+}
 
 // 礼物数量
 const giftCount = computed(() => {
@@ -292,17 +145,15 @@ const giftCount = computed(() => {
 })
 
 // 聊天弹幕（主区域滚动显示）
-// 注意：barrage-handler 中 chat 消息的 type 是 'text'
 const chatBarrages = computed(() => {
   return barrageStore.barrages.filter(b => b.type === 'chat' || b.type === 'text')
 })
 
 // 最新的通知消息（进入直播、礼物、关注等）- 只显示最新一条
-// 注意：barrage-handler 中 member/social 消息的 type 是 'follow'
 const latestNotification = computed(() => {
   const notifications = barrageStore.barrages.filter(b => 
     b.type === 'member' || b.type === 'gift' || b.type === 'like' || 
-    b.type === 'social' || b.type === 'follow' || b.type === 'share'
+    b.type === 'social' || b.type === 'follow' || b.type === 'share' || b.type === 'fansclub'
   )
   return notifications.length > 0 ? notifications[0] : null
 })
@@ -312,31 +163,155 @@ const printedCount = computed(() => {
   return barrageStore.barrages.filter(b => b.is_printed).length
 })
 
-// 格式化时长
-const formatDuration = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-  
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+// 清空弹幕（带确认对话框）
+const clearBarrages = async () => {
+  if (barrageStore.barrages.length === 0) {
+    ElMessage.info('弹幕列表已经是空的')
+    return
   }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要清空所有 ${barrageStore.barrages.length} 条弹幕记录吗？此操作不可恢复。`,
+      '清空确认',
+      {
+        confirmButtonText: '确定清空',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+    barrageStore.barrages = []
+    ElMessage.success('已清空弹幕列表')
+  } catch {
+    // 用户取消，不做任何操作
+  }
 }
 
-// 格式化时间
-const formatTime = (timestamp: number): string => {
-  const date = new Date(timestamp)
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  const seconds = date.getSeconds().toString().padStart(2, '0')
-  return `${hours}:${minutes}:${seconds}`
-}
-
-// 清空弹幕
-const clearBarrages = () => {
-  barrageStore.barrages = []
-  ElMessage.success('已清空弹幕列表')
+/**
+ * 手动打印弹幕（从 BarrageListPanel 触发）
+ * 支持重复打印，会正确获取/分配用户编号
+ */
+const handleManualPrint = async (barrage: any) => {
+  if (!window.electronAPI) {
+    ElMessage.warning('请在 Electron 环境中使用打印功能')
+    return
+  }
+  
+  if (!printerStore.isConnected) {
+    ElMessage.warning('请先连接打印机')
+    return
+  }
+  
+  try {
+    // 获取用户标识符
+    const displayId = barrage.display_id || ''
+    const shortId = barrage.short_id || ''
+    const userId = barrage.user_id || ''
+    const userIdentifier = displayId || shortId || userId
+    
+    // 获取或分配用户编号
+    let userNo = barrage.user_no
+    if (userNo === undefined || userNo === null) {
+      // 尚未分配编号，分配新编号
+      userNo = assignUserNumber(userIdentifier)
+      
+      // 更新 store 中的弹幕数据
+      const barrageInStore = barrageStore.barrages.find(b => b.id === barrage.id)
+      if (barrageInStore) {
+        barrageInStore.user_no = userNo
+      }
+      
+      // 更新数据库中的 user_no
+      if (barrage.id && window.electronAPI.updateBarrageUserNo) {
+        window.electronAPI.updateBarrageUserNo(barrage.id, userNo).catch(err => {
+          console.error('❌ 更新数据库用户编号失败:', err)
+        })
+      }
+      
+      console.log(`👤 手动打印 - 分配新用户编号: ${userIdentifier} -> #${userNo}`)
+    } else {
+      console.log(`👤 手动打印 - 使用已有用户编号: #${userNo}`)
+    }
+    
+    // 准备打印数据
+    const printData = {
+      id: barrage.id,
+      user_id: barrage.user_id,
+      display_id: barrage.display_id,
+      user_no: userNo,
+      nickname: barrage.nickname,
+      content: barrage.content,
+      type: barrage.type as 'text' | 'chat' | 'gift' | 'like' | 'follow' | 'share',
+      giftName: barrage.gift_name,
+      giftCount: barrage.gift_count,
+      timestamp: barrage.created_at || barrage.timestamp || Date.now(),
+    }
+    
+    // 获取当前模板设置
+    const currentTemplate = printerStore.currentTemplate
+    let templateFields = printerStore.settings.template_fields || []
+    let paperWidth = 40
+    let paperHeight = 30
+    
+    if (currentTemplate) {
+      templateFields = currentTemplate.fields || []
+      paperWidth = currentTemplate.paperWidth || 40
+      paperHeight = currentTemplate.paperHeight || 30
+    }
+    
+    const fieldsForPrint = templateFields.map(item => ({
+      id: item.id,
+      label: item.label,
+      visible: item.visible,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      style: item.style,
+      customText: item.customText || '',
+      _designer: (item as any)._designer
+    }))
+    
+    console.log(`🖨️ 手动打印弹幕 [ID:${printData.id}] [编号:#${userNo}] ${printData.nickname}: ${printData.content}`)
+    
+    // 执行打印
+    const result = await window.electronAPI.printBarrage(printData, {
+      fields: JSON.parse(JSON.stringify(fieldsForPrint)),
+      fontSize: printerStore.settings.print_font_size,
+      paperWidth,
+      paperHeight
+    })
+    
+    // 查找 store 中的弹幕并更新状态
+    const barrageInStore = barrageStore.barrages.find(b => b.id === barrage.id)
+    
+    if (result.success) {
+      // 打印成功
+      if (barrageInStore) {
+        barrageInStore.is_printed = 1
+      }
+      ElMessage.success('打印成功')
+      console.log(`✅ 手动打印成功 [ID:${printData.id}]`)
+    } else {
+      // 打印失败
+      if (barrageInStore) {
+        barrageInStore.is_printed = -1
+      }
+      ElMessage.error(result.message || '打印失败')
+      console.error(`❌ 手动打印失败 [ID:${printData.id}]:`, result.message)
+    }
+  } catch (error: any) {
+    console.error('❌ 手动打印出错:', error)
+    
+    // 更新打印状态为失败
+    const barrageInStore = barrageStore.barrages.find(b => b.id === barrage.id)
+    if (barrageInStore) {
+      barrageInStore.is_printed = -1
+    }
+    
+    ElMessage.error('打印失败: ' + (error.message || '未知错误'))
+  }
 }
 
 // 计时器
@@ -359,18 +334,39 @@ const handleStart = async () => {
   startLoading.value = true
 
   try {
-    // 1. 清空之前的弹幕数据
+    // 1. 重新加载过滤规则（确保使用最新设置）
+    await printerStore.loadSettings()
+    
+    // 2. 清空之前的弹幕数据和用户编号映射
     barrageStore.clearBarrages()
+    resetUserNumberMap()
 
-    // 2. 设置弹幕监听
+    // 3. 设置弹幕监听
     console.log('📡 开始设置弹幕监听...')
-    const unsubscribe = window.electronAPI.onBarrageReceived((barrage: any) => {
+    const unsubscribe = window.electronAPI.onBarrageReceived(async (barrage: any) => {
       console.log('📨 LiveRoom 收到弹幕:', barrage)
       
-      // 添加到 store
-      barrageStore.barrages.unshift({
-        id: Date.now() + Math.random(), // 临时 ID
+      // 获取用户标识符（优先级：displayId > shortId > userId）
+      // displayId: 用户自定义的抖音号（很多用户没设置，可能为空）
+      // shortId: 系统分配的数字抖音号
+      // userId: 用户唯一 secUid
+      const displayId = barrage.displayId || barrage.display_id || ''
+      const shortId = barrage.shortId || barrage.short_id || ''
+      const userId = barrage.userId || barrage.user_id || ''
+      
+      // 用户标识符：优先使用 displayId，其次 shortId，最后 userId
+      const userIdentifier = displayId || shortId || userId
+        
+      // 获取已有的用户编号（如果之前已分配）
+      const existingUserNo = getExistingUserNumber(userIdentifier)
+      
+      // 构建弹幕数据（此时 user_no 可能为 undefined，稍后在打印时分配）
+      const barrageData = {
+        id: barrage.id,
         user_id: barrage.userId || barrage.user_id,
+        short_id: barrage.shortId || barrage.short_id || '',  // 抖音号（短ID）
+        display_id: displayId,  // 抖音号（显示ID）
+        user_no: existingUserNo,  // 本场直播用户编号（可能为 undefined）
         nickname: barrage.nickname,
         content: barrage.content,
         type: barrage.type || 'chat',
@@ -379,20 +375,144 @@ const handleStart = async () => {
         gift_value: barrage.giftValue || barrage.gift_value,
         user_level: barrage.userLevel || barrage.user_level || 0,
         avatar_url: barrage.avatarUrl || barrage.avatar_url || '',
+        has_badge: barrage.hasBadge || barrage.has_badge || false, // 是否有灯牌
         timestamp: barrage.timestamp || Date.now(),
         is_printed: 0,
-      })
-
-      // 限制列表长度
-      if (barrageStore.barrages.length > 500) {
-        barrageStore.barrages.pop()
+      }
+      
+      // 添加到 store
+      barrageStore.barrages.unshift(barrageData)
+      
+      // 保存到数据库
+      try {
+        const dbId = await window.electronAPI.insertBarrage({
+          roomId: currentRoomId.value,
+          userId: barrageData.user_id,
+          shortId: barrageData.short_id,
+          displayId: barrageData.display_id,
+          userNo: barrageData.user_no,
+          nickname: barrageData.nickname,
+          userLevel: barrageData.user_level,
+          avatarUrl: barrageData.avatar_url,
+          content: barrageData.content,
+          type: barrageData.type,
+          giftName: barrageData.gift_name,
+          giftCount: barrageData.gift_count,
+          giftValue: barrageData.gift_value,
+          createdAt: barrageData.timestamp,
+        })
+        // 更新 store 中的 id 为数据库生成的 id
+        if (dbId) {
+          barrageData.id = dbId
+        }
+        console.log(`💾 弹幕已保存到数据库 [ID:${dbId}]`)
+      } catch (error) {
+        console.error('❌ 保存弹幕到数据库失败:', error)
+      }
+      
+      // 自动打印（根据过滤规则）
+      if (printerStore.settings.auto_print && printerStore.isConnected) {
+        const printData = {
+          id: barrageData.id,
+          user_id: barrageData.user_id,
+          display_id: barrageData.display_id,
+          user_no: 0,  // 稍后在打印时分配
+          nickname: barrageData.nickname,
+          content: barrageData.content,
+          type: barrageData.type as 'text' | 'chat' | 'gift' | 'like' | 'follow' | 'share',
+          giftName: barrageData.gift_name,
+          giftCount: barrageData.gift_count,
+          timestamp: barrageData.timestamp,
+          user_level: barrageData.user_level,
+          gift_value: barrageData.gift_value,
+          has_badge: barrageData.has_badge,
+        }
+        
+        console.log(`🔍 检查弹幕是否需要打印 [${printData.type}] ${printData.nickname}: ${printData.content}`)
+        
+        // 使用过滤规则检查是否应该打印
+        const shouldPrint = printerStore.shouldPrintBarrage(printData)
+        
+        if (shouldPrint) {
+          // 只有符合过滤规则的弹幕才分配用户编号
+          // 使用相同的 userIdentifier 确保一致性
+          const userNo = assignUserNumber(userIdentifier)
+          printData.user_no = userNo
+          
+          // 更新 store 中的弹幕数据（添加 user_no）
+          const barrageInStoreForNo = barrageStore.barrages.find(b => b.id === barrageData.id)
+          if (barrageInStoreForNo) {
+            barrageInStoreForNo.user_no = userNo
+          }
+          
+          // 更新数据库中的 user_no
+          if (barrageData.id) {
+            window.electronAPI.updateBarrageUserNo(barrageData.id, userNo).catch(err => {
+              console.error('❌ 更新数据库用户编号失败:', err)
+            })
+          }
+          
+          console.log(`🖨️ 准备打印弹幕 [ID:${printData.id}] [编号:${userNo}] [${printData.type}] ${printData.nickname}: ${printData.content}`)
+          
+          // 获取当前选中的模板
+          const currentTemplate = printerStore.currentTemplate
+          
+          // 获取模板设置并打印
+          let templateFields = printerStore.settings.template_fields || []
+          let paperWidth = 40
+          let paperHeight = 30
+          
+          // 如果有当前模板，使用模板的字段和尺寸
+          if (currentTemplate) {
+            templateFields = currentTemplate.fields || []
+            paperWidth = currentTemplate.paperWidth || 40
+            paperHeight = currentTemplate.paperHeight || 30
+          }
+          
+          const fieldsForPrint = templateFields.map(item => ({
+            id: item.id,
+            label: item.label,
+            visible: item.visible,
+            x: item.x,
+            y: item.y,
+            w: item.w,
+            h: item.h,
+            style: item.style,
+            customText: item.customText || '',
+            _designer: (item as any)._designer
+          }))
+          
+          try {
+            const result = await window.electronAPI.printBarrage(printData, {
+              fields: JSON.parse(JSON.stringify(fieldsForPrint)),
+              fontSize: printerStore.settings.print_font_size,
+              paperWidth,
+              paperHeight
+            })
+            
+            if (result.success) {
+              // 更新打印状态
+              const barrageInStore = barrageStore.barrages.find(b => b.id === barrageData.id)
+              if (barrageInStore) {
+                barrageInStore.is_printed = 1
+              }
+              console.log(`✅ 弹幕打印成功 [ID:${printData.id}] ${printData.nickname}: ${printData.content}`)
+            } else {
+              console.warn(`⚠️ 弹幕打印失败 [ID:${printData.id}]:`, result.message)
+            }
+          } catch (error) {
+            console.error(`❌ 打印弹幕出错 [ID:${printData.id}]:`, error)
+          }
+        } else {
+          console.log(`⏭️ 弹幕被过滤，不打印 [${printData.type}] ${printData.nickname}: ${printData.content}`)
+        }
       }
     })
 
     // 保存 unsubscribe 函数
     ;(window as any).__barrageUnsubscribe = unsubscribe
 
-    // 3. 启动监控
+    // 4. 启动监控
     const result = await window.electronAPI.startLiveMonitoring(roomUrl.value)
 
     if (result.success) {
@@ -503,18 +623,6 @@ function extractRoomId(url: string): string {
   return url
 }
 
-// 自动滚动到最新聊天弹幕
-watch(
-  () => chatBarrages.value.length,
-  () => {
-    nextTick(() => {
-      if (barrageContainer.value) {
-        barrageContainer.value.scrollTop = 0
-      }
-    })
-  }
-)
-
 // 监控停止事件的取消订阅函数
 let unsubscribeMonitoringStopped: (() => void) | null = null
 // 弹幕断开事件的取消订阅函数
@@ -524,6 +632,14 @@ let unsubscribeBarrageDisconnected: (() => void) | null = null
 onMounted(async () => {
   if (window.electronAPI) {
     try {
+      // 加载打印机设置（打印机连接由 PrinterSelector 组件处理）
+      await printerStore.loadSettings()
+      console.log('🖨️ 打印机设置已加载:', {
+        printerName: printerStore.settings.printer_name,
+        autoPrint: printerStore.settings.auto_print,
+        isConnected: printerStore.isConnected
+      })
+      
       const status = await window.electronAPI.getMonitoringStatus()
       isMonitoring.value = status.isActive
       currentRoomId.value = status.roomId || ''
@@ -599,343 +715,102 @@ onUnmounted(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f5f7fa;
-}
-
-/* ===== 顶部标题栏 ===== */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  background: #f0f2f5; /* 更柔和的灰色背景 */
 }
 
 /* ===== 主内容区域 ===== */
 .content {
   flex: 1;
   display: flex;
-  gap: 16px;
-  padding: 16px;
+  gap: 24px; /* 增加间距 */
+  padding: 24px; /* 增加内边距 */
   overflow: hidden;
+  max-width: 1920px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ===== 左侧面板 ===== */
 .left-panel {
-  width: 360px;
+  width: 320px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   overflow-y: auto;
+  padding-right: 4px; /* 防止滚动条遮挡 */
 }
 
-.control-card,
-.stats-card {
-  border-radius: 12px;
-  border: none;
-}
-
-.card-header {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.input-group {
-  margin-bottom: 20px;
-}
-
-.input-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #606266;
-}
-
-.input-tip {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #909399;
-  line-height: 1.5;
-}
-
-.control-buttons {
-  margin-top: 20px;
-}
-
-/* ===== 统计卡片 ===== */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.stat-item {
-  text-align: center;
-  padding: 16px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.stat-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #409eff;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-}
-
-/* ===== 右侧弹幕面板 ===== */
-.right-panel {
+/* ===== 中间弹幕面板 ===== */
+.center-panel {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-width: 0; /* 防止flex子项溢出 */
 }
 
-.barrage-container {
-  flex: 1;
+/* ===== 右侧面板 ===== */
+.right-panel {
+  width: 340px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #1a1a1a;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.barrage-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  background: #252525;
-  border-bottom: 1px solid #333;
-}
-
-.header-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.barrage-list {
-  flex: 1;
+  gap: 20px;
   overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 8px;
+  padding-right: 4px; /* 防止滚动条遮挡 */
 }
 
-/* 滚动条样式 */
-.barrage-list::-webkit-scrollbar {
+/* 自定义滚动条 */
+.custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
-
-.barrage-list::-webkit-scrollbar-track {
-  background: #1a1a1a;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-.barrage-list::-webkit-scrollbar-thumb {
-  background: #444;
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(144, 147, 153, 0.3);
   border-radius: 3px;
 }
-
-.barrage-list::-webkit-scrollbar-thumb:hover {
-  background: #555;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(144, 147, 153, 0.5);
 }
 
-/* ===== 底部通知栏 ===== */
-.notification-bar {
-  flex-shrink: 0;
-  padding: 12px 20px;
-  background: linear-gradient(90deg, rgba(255, 186, 0, 0.15) 0%, rgba(30, 30, 30, 0.95) 100%);
-  border-top: 1px solid #333;
-  animation: notificationSlide 0.3s ease-out;
-}
-
-.notification-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.notification-icon {
-  font-size: 16px;
-}
-
-.notification-user {
-  color: #ffba00;
-  font-weight: 600;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notification-text {
-  color: #e0e0e0;
-}
-
-.notification-count {
-  color: #ff6b9d;
-  font-weight: 600;
-}
-
-@keyframes notificationSlide {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ===== 空状态 ===== */
-.empty-state {
+.barrage-wrapper {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: #909399;
+  overflow: hidden;
+  background: #1a1a1a;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
 }
 
-.empty-text {
-  margin-top: 16px;
-  font-size: 14px;
-  color: #666;
-}
-
-/* ===== 弹幕项 ===== */
-.barrage-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #252525;
-  border-radius: 8px;
-  border-left: 3px solid #00d9ff;
-  transition: all 0.2s;
-  animation: slideIn 0.3s ease-out;
-}
-
-.barrage-item:hover {
-  background: #2a2a2a;
-  transform: translateX(-2px);
-}
-
-.barrage-item.is-gift {
-  border-left-color: #ff6b9d;
-  background: linear-gradient(90deg, rgba(255, 107, 157, 0.1) 0%, #252525 100%);
-}
-
-.barrage-item.is-member {
-  border-left-color: #ffba00;
-  background: linear-gradient(90deg, rgba(255, 186, 0, 0.1) 0%, #252525 100%);
-}
-
-.barrage-item.is-like {
-  border-left-color: #ff2d55;
-  background: linear-gradient(90deg, rgba(255, 45, 85, 0.1) 0%, #252525 100%);
-}
-
-.barrage-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.barrage-content {
+/* 覆盖 BarrageListPanel 的样式以适应新的包装器 */
+.barrage-list-panel {
+  border-radius: 16px 16px 0 0 !important;
+  box-shadow: none !important;
   flex: 1;
-  min-width: 0;
+  min-height: 0; /* 允许 flex 子项收缩 */
 }
 
-.barrage-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.nickname {
-  font-size: 13px;
-  font-weight: 600;
-  color: #00d9ff;
-}
-
-.time {
-  font-size: 11px;
-  color: #666;
-}
-
-.barrage-text {
-  font-size: 14px;
-  color: #e0e0e0;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.barrage-status {
+/* 底部通知栏容器（固定在底部，不遮挡弹幕） */
+.notification-container {
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
-/* ===== 动画 ===== */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* 通知栏内容样式覆盖 */
+.notification-container :deep(.notification-bar) {
+  border-radius: 0 0 16px 16px;
 }
 
 /* ===== 响应式 ===== */
-@media (max-width: 1200px) {
+@media (max-width: 1400px) {
   .left-panel {
+    width: 300px;
+  }
+  .right-panel {
     width: 320px;
   }
 }
 </style>
-

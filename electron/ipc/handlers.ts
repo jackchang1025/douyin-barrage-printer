@@ -2,32 +2,10 @@ import { ipcMain, shell, dialog, BrowserWindow } from 'electron'
 import { SQLiteManager } from '../database/sqlite'
 import { machineIdSync } from 'node-machine-id'
 import Store from 'electron-store'
-import { douyinLoginWindow } from '../douyin/login-window'
-import { cookieManager } from '../douyin/cookie-manager'
 import { liveMonitor, type BarrageData } from '../douyin/live-monitor'
 import { printerService, type PrintOptions, type BarragePrintData } from '../printer'
 
 const store = new Store()
-
-/**
- * 从URL中提取直播间ID的辅助函数
- */
-function extractRoomIdFromUrl(url: string): string | null {
-    try {
-        if (/^\d+$/.test(url)) {
-            return url
-        }
-
-        const match = url.match(/live\.douyin\.com\/(\d+)/)
-        if (match) {
-            return match[1]
-        }
-
-        return null
-    } catch (error) {
-        return null
-    }
-}
 
 /**
  * 设置所有 IPC 处理器
@@ -41,33 +19,12 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
 
     // 监听 LiveMonitor 发出的弹幕数据，并转发到所有渲染进程
     ipcMain.on('live-barrage:data', (_event, barrage: BarrageData) => {
-        // 存储到数据库
         try {
-            const barrageId = sqliteManager.insertBarrage({
-                roomId: barrage.userId, // TODO: 需要从某处获取当前房间ID
-                userId: barrage.userId,
-                nickname: barrage.nickname,
-                userLevel: barrage.userLevel,
-                avatarUrl: barrage.avatarUrl,
-                content: barrage.content,
-                type: barrage.type,
-                giftId: barrage.giftId,
-                giftName: barrage.giftName,
-                giftCount: barrage.giftCount,
-                giftValue: barrage.giftValue,
-                createdAt: barrage.timestamp,
-                metadata: JSON.stringify(barrage),
-            })
-
-            // 转发到所有渲染进程
             BrowserWindow.getAllWindows().forEach(window => {
-                window.webContents.send('barrage:received', {
-                    id: barrageId,
-                    ...barrage,
-                })
+                window.webContents.send('barrage:received', barrage)
             })
         } catch (error) {
-            console.error('❌ 处理弹幕失败:', error)
+            console.error('❌ 转发弹幕失败:', error)
         }
     })
 
@@ -108,8 +65,12 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
         return true
     })
 
-    ipcMain.handle('db:getStatistics', (_event, roomId) => {
-        return sqliteManager.getStatistics(roomId)
+    ipcMain.handle('db:updateBarrageUserNo', (_event, barrageId: number, userNo: number) => {
+        return sqliteManager.updateBarrageUserNo(barrageId, userNo)
+    })
+
+    ipcMain.handle('db:getStatistics', (_event, options) => {
+        return sqliteManager.getStatistics(options)
     })
 
     ipcMain.handle('db:getPrintSettings', () => {
@@ -134,121 +95,90 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
         return sqliteManager.cleanOldData(days)
     })
 
-    // ==================== 抖音相关 ====================
-
     /**
-     * 打开抖音登录窗口
+     * 高级弹幕查询（支持筛选、分页）
      */
-    ipcMain.handle('douyin:openLogin', async (event) => {
-        const mainWindow = BrowserWindow.fromWebContents(event.sender)
-
-        if (!mainWindow) {
-            return { success: false, message: '无法获取主窗口' }
-        }
-
-        return new Promise((resolve) => {
-            douyinLoginWindow.open(mainWindow, (account) => {
-                // 登录成功回调
-                resolve({
-                    success: true,
-                    account: {
-                        nickname: account.nickname,
-                        uid: account.uid,
-                        avatarUrl: account.avatarUrl,
-                        loginTime: account.loginTime,
-                    },
-                })
-            })
-
-            // 监听窗口关闭（用户取消）
-            setTimeout(() => {
-                if (!douyinLoginWindow.isOpen()) {
-                    resolve({ success: false, message: '用户取消登录' })
-                }
-            }, 100)
-        })
+    ipcMain.handle('db:queryBarrages', (_event, options) => {
+        return sqliteManager.queryBarrages(options)
     })
 
     /**
-     * 获取当前登录的账号信息
+     * 获取弹幕类型统计（支持筛选参数）
      */
-    ipcMain.handle('douyin:getAccount', async () => {
-        const account = await cookieManager.loadAccount()
-
-        if (!account) {
-            return { success: false, message: '未登录' }
-        }
-
-        return {
-            success: true,
-            account: {
-                nickname: account.nickname,
-                uid: account.uid,
-                avatarUrl: account.avatarUrl,
-                loginTime: account.loginTime,
-                lastActiveTime: account.lastActiveTime,
-            },
-        }
+    ipcMain.handle('db:getBarrageTypeStats', (_event, options) => {
+        return sqliteManager.getBarrageTypeStats(options)
     })
 
     /**
-     * 退出抖音账号（清除 Cookie）
+     * 获取用户排行榜
      */
-    ipcMain.handle('douyin:logout', async () => {
-        const success = await cookieManager.clearAccount()
-        return { success, message: success ? '已退出登录' : '退出失败' }
+    ipcMain.handle('db:getUserRanking', (_event, options) => {
+        return sqliteManager.getUserRanking(options)
     })
 
     /**
-     * 检查 Cookie 是否有效
+     * 导出弹幕数据
      */
-    ipcMain.handle('douyin:checkCookieStatus', async () => {
-        const account = await cookieManager.loadAccount()
-
-        if (!account) {
-            return { valid: false, message: '未登录' }
-        }
-
-        // 清理过期的 Cookie
-        const validCookies = cookieManager.removeExpiredCookies(account.cookies)
-
-        if (validCookies.length === 0) {
-            return { valid: false, message: 'Cookie 已过期' }
-        }
-
-        // 验证 Cookie 是否仍然有效
-        const isValid = await cookieManager.validateCookies(validCookies)
-
-        return {
-            valid: isValid,
-            message: isValid ? 'Cookie 有效' : 'Cookie 失效，请重新登录',
-        }
+    ipcMain.handle('db:exportBarrages', (_event, options) => {
+        return sqliteManager.exportBarrages(options)
     })
 
     /**
-     * 注入 Cookie（用于恢复登录状态）
+     * 获取时间范围统计
      */
-    ipcMain.handle('douyin:injectCookies', async () => {
-        const account = await cookieManager.loadAccount()
-
-        if (!account) {
-            return { success: false, message: '未找到保存的账号' }
-        }
-
-        const success = await cookieManager.injectCookies(account.cookies)
-
-        return {
-            success,
-            message: success ? 'Cookie 已注入' : '注入失败',
-        }
+    ipcMain.handle('db:getTimeRangeStats', (_event, startTime, endTime, roomId) => {
+        return sqliteManager.getTimeRangeStats(startTime, endTime, roomId)
     })
 
     /**
-     * 打印已保存的Cookie详情（调试用）
+     * 批量删除弹幕
      */
-    ipcMain.handle('douyin:printCookies', async () => {
-        await cookieManager.printSavedCookies()
-        return { success: true }
+    ipcMain.handle('db:deleteBarrages', (_event, ids: number[]) => {
+        return sqliteManager.deleteBarrages(ids)
+    })
+
+    /**
+     * 删除所有弹幕
+     */
+    ipcMain.handle('db:deleteAllBarrages', () => {
+        return sqliteManager.deleteAllBarrages()
+    })
+
+    // ==================== 打印模板管理 ====================
+
+    /**
+     * 获取所有打印模板
+     */
+    ipcMain.handle('template:getAll', () => {
+        return sqliteManager.getTemplates()
+    })
+
+    /**
+     * 获取单个打印模板
+     */
+    ipcMain.handle('template:get', (_event, id: string) => {
+        return sqliteManager.getTemplate(id)
+    })
+
+    /**
+     * 保存打印模板（新增或更新）
+     */
+    ipcMain.handle('template:save', (_event, template: any) => {
+        return sqliteManager.saveTemplate(template)
+    })
+
+    /**
+     * 删除打印模板
+     */
+    ipcMain.handle('template:delete', (_event, id: string) => {
+        return sqliteManager.deleteTemplate(id)
+    })
+
+    /**
+     * 设置默认模板
+     */
+    ipcMain.handle('template:setDefault', (_event, id: string) => {
+        return sqliteManager.setDefaultTemplate(id)
     })
 
     // ==================== 直播监控相关 ====================
@@ -257,38 +187,9 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
     // - douyin:startLiveMonitoring
     // - douyin:stopLiveMonitoring
     // - douyin:getMonitoringStatus
-    // - douyin:showLiveWindow
     // - douyin:hideLiveWindow
+    // - douyin:showLiveWindow
 
-    /**
-     * ⚠️ 已弃用：旧版本的监控处理器（已移至 LiveMonitor 类内部）
-     * 保留注释作为参考
-     */
-    /*
-    ipcMain.handle('douyin:startLiveMonitoring', async (event, roomUrl: string) => {
-        // ... 旧代码 ...
-    })
-    
-    ipcMain.handle('douyin:stopLiveMonitoring', async () => {
-        // ... 旧代码 ...
-    })
-    
-    ipcMain.handle('douyin:getMonitoringStatus', async () => {
-        // ... 旧代码 ...
-    })
-    
-    ipcMain.handle('douyin:showLiveWindow', async () => {
-        // ... 旧代码 ...
-    })
-    
-    ipcMain.handle('douyin:hideLiveWindow', async () => {
-        // ... 旧代码 ...
-    })
-    
-    ipcMain.handle('douyin:setBackgroundMode', async (_event, enabled: boolean) => {
-        // ... 旧代码 ...
-    })
-    */
 
     // ==================== 打印机相关 ====================
 
@@ -453,20 +354,12 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
         paperHeight?: number
     }) => {
         try {
-            console.log('🖨️ 打印弹幕:', barrage.nickname, barrage.content?.substring(0, 20))
-            console.log('   选项:', {
-                hasFields: !!(options?.fields?.length),
-                fieldsCount: options?.fields?.length || 0,
-                paperWidth: options?.paperWidth,
-                paperHeight: options?.paperHeight
-            })
-
             const printSettings = sqliteManager.getPrintSettings()
 
-            // 优先使用传入的 fields，否则使用保存的模板
-            const fields = options?.fields || printSettings?.template_fields
-            const paperWidth = options?.paperWidth || 40
-            const paperHeight = options?.paperHeight || 30
+            // 优先使用传入的 fields（即使是空数组也使用传入的），只有 undefined 时才使用保存的模板
+            const fields = options?.fields !== undefined ? options.fields : printSettings?.template_fields
+            const paperWidth = options?.paperWidth !== undefined ? options.paperWidth : 40
+            const paperHeight = options?.paperHeight !== undefined ? options.paperHeight : 30
 
             await printerService.printBarrage(barrage, {
                 header: options?.header || printSettings?.template_header,

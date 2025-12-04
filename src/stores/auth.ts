@@ -2,9 +2,20 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { buildApiUrl, API_ENDPOINTS } from '@/utils/apiConfig'
+
+/**
+ * 模块级别的变量（所有 store 实例共享）
+ */
+// 标记是否正在进行自动验证（restoreSession）
+let isAutoValidating = false
+// 标记 axios 拦截器是否已注册
+let interceptorsRegistered = false
 
 /**
  * 认证状态管理
+ * 所有 API 调用都发送真实请求到配置的后端地址
+ * 开发时可以启动 mock server 来返回测试数据
  */
 export const useAuthStore = defineStore('auth', () => {
     // 状态
@@ -13,78 +24,69 @@ export const useAuthStore = defineStore('auth', () => {
     const loading = ref(false)
     const isAuthenticated = ref(false)
 
+    // 初始化时从 localStorage 恢复 user
+    const savedUser = localStorage.getItem('user_info')
+    if (savedUser && token.value) {
+        try {
+            user.value = JSON.parse(savedUser)
+        } catch (e) {
+            console.error('解析用户信息失败:', e)
+        }
+    }
+
     // 计算属性改为监听
     watch([token, user], () => {
         isAuthenticated.value = !!token.value && !!user.value
     }, { immediate: true })
 
     /**
-     * 初始化 axios 拦截器
+     * 初始化 axios 拦截器（只注册一次）
      */
-    axios.interceptors.request.use((config) => {
-        if (token.value) {
-            config.headers.Authorization = `Bearer ${token.value}`
-        }
-        return config
-    })
+    if (!interceptorsRegistered) {
+        interceptorsRegistered = true
 
-    axios.interceptors.response.use(
-        (response) => response,
-        (error) => {
-            // 开发模式下不显示网络错误
-            if (import.meta.env.DEV && error.code === 'ERR_NETWORK') {
-                console.warn('🔧 开发模式：忽略网络错误（使用模拟数据）')
+        axios.interceptors.request.use((config) => {
+            const currentToken = localStorage.getItem('auth_token')
+            if (currentToken) {
+                config.headers.Authorization = `Bearer ${currentToken}`
+            }
+            return config
+        })
+
+        axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                // 只有非自动验证的请求才显示 401 错误消息
+                if (error.response?.status === 401 && !isAutoValidating) {
+                    console.warn('🔒 API 返回 401 未授权，需要重新登录')
+                    // 清除认证状态
+                    localStorage.removeItem('auth_token')
+                    localStorage.removeItem('user_info')
+                    ElMessage.error('登录已过期，请重新登录')
+                }
                 return Promise.reject(error)
             }
-
-            if (error.response?.status === 401) {
-                // Token 过期或无效
-                logout()
-                ElMessage.error('登录已过期，请重新登录')
-            }
-            return Promise.reject(error)
-        }
-    )
+        )
+    }
 
     /**
-     * 登录（开发环境自动使用模拟数据）
+     * 清除认证状态（内部方法）
+     */
+    const clearAuth = () => {
+        token.value = null
+        user.value = null
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('user_info')
+    }
+
+    /**
+     * 登录
      */
     const login = async (email: string, password: string) => {
         loading.value = true
 
         try {
-            // 🔥 开发环境：使用模拟数据
-            if (import.meta.env.DEV) {
-                console.log('🚀 开发模式：使用模拟登录数据')
-
-                // 模拟网络延迟
-                await new Promise(resolve => setTimeout(resolve, 500))
-
-                // 模拟登录成功
-                const mockResponse = {
-                    token: 'mock-dev-token-' + Date.now(),
-                    user: {
-                        id: 1,
-                        name: email.split('@')[0] || '开发用户',
-                        email: email,
-                        plan: 'pro',
-                        subscription_expiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-                    }
-                }
-
-                token.value = mockResponse.token
-                user.value = mockResponse.user
-
-                // 持久化存储
-                localStorage.setItem('auth_token', mockResponse.token)
-                localStorage.setItem('user_info', JSON.stringify(mockResponse.user))
-
-                ElMessage.success('登录成功（开发模式）')
-                return { success: true }
-            }
-
-            // 🌐 生产环境：调用真实 API
-            const response = await axios.post('http://localhost:8000/api/auth/login', {
+            const response = await axios.post(buildApiUrl(API_ENDPOINTS.AUTH.LOGIN), {
                 email,
                 password,
             })
@@ -115,23 +117,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     /**
-     * 注册（开发环境自动使用模拟数据）
+     * 注册
      */
     const register = async (data: { name: string; email: string; password: string }) => {
         loading.value = true
 
         try {
-            // 🔥 开发环境：模拟注册成功
-            if (import.meta.env.DEV) {
-                console.log('🚀 开发模式：模拟注册成功')
-                await new Promise(resolve => setTimeout(resolve, 500))
-
-                ElMessage.success('注册成功（开发模式），请登录')
-                return { success: true }
-            }
-
-            // 🌐 生产环境：调用真实 API
-            await axios.post('http://localhost:8000/api/auth/register', data)
+            await axios.post(buildApiUrl(API_ENDPOINTS.AUTH.REGISTER), data)
 
             ElMessage.success('注册成功，请登录')
             return { success: true }
@@ -150,18 +142,21 @@ export const useAuthStore = defineStore('auth', () => {
      * 退出登录
      */
     const logout = async () => {
+        // 标记为自动验证，避免 logout 请求触发 401 错误消息
+        isAutoValidating = true
+
         try {
             if (token.value) {
-                await axios.post('http://localhost:8000/api/auth/logout')
+                await axios.post(buildApiUrl(API_ENDPOINTS.AUTH.LOGOUT))
             }
         } catch (error) {
-            console.error('退出登录失败:', error)
+            // logout 请求失败不影响退出流程
+            console.warn('退出登录请求失败（可忽略）:', error)
         } finally {
+            isAutoValidating = false
+
             // 清除状态
-            token.value = null
-            user.value = null
-            localStorage.removeItem('auth_token')
-            localStorage.removeItem('user_info')
+            clearAuth()
 
             // 停止心跳
             if (window.electronAPI) {
@@ -174,60 +169,74 @@ export const useAuthStore = defineStore('auth', () => {
 
     /**
      * 恢复会话
+     * 从 localStorage 恢复认证状态
+     * 注意：子窗口（如直播监控窗口）也会调用此方法，需要信任本地存储的数据
      */
     const restoreSession = async () => {
         const savedToken = localStorage.getItem('auth_token')
-        const savedUser = localStorage.getItem('user_info')
+        const savedUserStr = localStorage.getItem('user_info')
 
-        if (savedToken && savedUser) {
+        if (savedToken && savedUserStr) {
+            // 先恢复本地状态（确保子窗口能正常使用）
             token.value = savedToken
-            user.value = JSON.parse(savedUser)
-
             try {
-                // 验证 Token 是否有效
-                const response = await axios.get('http://localhost:8000/api/auth/me')
+                user.value = JSON.parse(savedUserStr)
+            } catch (e) {
+                console.error('解析用户信息失败:', e)
+                clearAuth()
+                return
+            }
+
+            // 标记为自动验证，避免触发全局错误提示
+            isAutoValidating = true
+
+            // 后台静默验证 Token（可选，不影响已恢复的状态）
+            try {
+                const response = await axios.get(buildApiUrl(API_ENDPOINTS.AUTH.ME))
+                // 验证成功，更新用户信息
                 user.value = response.data.user
+                localStorage.setItem('user_info', JSON.stringify(response.data.user))
 
                 // 启动心跳
                 if (window.electronAPI) {
                     await window.electronAPI.startHeartbeat()
                 }
-            } catch (error) {
-                // Token 无效，清除
-                logout()
+            } catch (error: any) {
+                // 区分错误类型
+                if (error.response?.status === 401) {
+                    // Token 确实无效（服务器明确拒绝），清除认证状态
+                    console.warn('🔒 Token 已失效，需要重新登录')
+                    clearAuth()
+                } else {
+                    // 网络错误或服务器不可用，保持本地状态
+                    // 子窗口依赖这个逻辑正常工作
+                    console.warn('⚠️ 无法验证 Token（服务器可能不可用），使用本地缓存的认证状态')
+                }
+            } finally {
+                isAutoValidating = false
             }
         }
     }
 
     /**
-     * 检查订阅状态（开发环境自动使用模拟数据）
+     * 检查订阅状态
      */
     const checkSubscription = async () => {
-        // 🔥 开发环境：返回模拟订阅数据
-        if (import.meta.env.DEV) {
-            console.log('🚀 开发模式：使用模拟订阅数据')
+        // 标记为自动验证，避免触发 401 错误消息
+        isAutoValidating = true
 
-            return {
-                active: true,
-                plan: user.value?.plan || 'pro',
-                expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-                days_remaining: 365,
-                features: {
-                    daily_print_limit: -1,  // 无限制
-                    filters: true,
-                    custom_template: true,
-                    api_access: true,
-                }
-            }
-        }
-
-        // 🌐 生产环境：调用真实 API
         try {
-            const response = await axios.get('http://localhost:8000/api/subscription/check')
+            const response = await axios.get(buildApiUrl(API_ENDPOINTS.SUBSCRIPTION.CHECK))
             return response.data
-        } catch (error) {
-            console.error('检查订阅失败:', error)
+        } catch (error: any) {
+            if (error.response?.status === 401) {
+                console.warn('检查订阅失败：未授权')
+            } else {
+                console.error('检查订阅失败:', error)
+            }
             return null
+        } finally {
+            isAutoValidating = false
         }
     }
 
@@ -246,4 +255,3 @@ export const useAuthStore = defineStore('auth', () => {
         checkSubscription,
     }
 })
-

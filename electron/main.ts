@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell, Menu } from 'electron'
 import path from 'path'
 import { SQLiteManager } from './database/sqlite'
 import { setupIpcHandlers } from './ipc/handlers'
 import { liveMonitor } from './douyin/live-monitor'
+import { liveRoomWindowManager } from './window/live-room-window'
+import { autoUpdaterManager } from './updater/auto-updater'
 
 // 禁用硬件加速（某些环境下可能有兼容问题）
 // app.disableHardwareAcceleration()
@@ -10,13 +12,25 @@ import { liveMonitor } from './douyin/live-monitor'
 let mainWindow: BrowserWindow | null = null
 let sqliteManager: SQLiteManager | null = null
 
-// 开发环境URL
-const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+// 开发环境URL（只在开发模式下有值）
+const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+
+// 判断是否为生产环境（打包后的应用）
+const isPackaged = app.isPackaged
+
+// 声明全局开发模式变量（通过 vite define 注入）
+declare const __DEV_MODE__: boolean
+
+// 开发测试模式：通过 npm run pack:win:dev 打包时会设为 true
+const DEV_MODE = typeof __DEV_MODE__ !== 'undefined' ? __DEV_MODE__ : false
 
 /**
  * 创建主窗口
  */
 function createWindow() {
+    // 移除默认菜单栏
+    Menu.setApplicationMenu(null)
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -26,6 +40,7 @@ function createWindow() {
         frame: true,
         show: false,
         backgroundColor: '#ffffff',
+        autoHideMenuBar: true, // 隐藏菜单栏
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -39,19 +54,29 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         mainWindow?.show()
 
-        // 开发环境打开开发者工具
-        if (VITE_DEV_SERVER_URL) {
+        // 开发测试模式：打开开发者工具（DEV_MODE = true 时打包后也会打开）
+        if (DEV_MODE || (!isPackaged && VITE_DEV_SERVER_URL)) {
             mainWindow?.webContents.openDevTools()
         }
     })
 
     // 加载页面
-    if (process.env.NODE_ENV !== 'production') {
+    if (!isPackaged && VITE_DEV_SERVER_URL) {
+        // 开发环境：加载开发服务器
         mainWindow.loadURL(VITE_DEV_SERVER_URL)
         console.log('🌐 加载开发服务器:', VITE_DEV_SERVER_URL)
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+        // 生产环境：加载本地文件
+        const indexPath = path.join(__dirname, '../dist/index.html')
+        console.log('📦 加载生产环境页面:', indexPath)
+        mainWindow.loadFile(indexPath)
     }
+
+    // 设置主窗口引用给直播监控窗口管理器
+    liveRoomWindowManager.setMainWindow(mainWindow)
+
+    // 设置主窗口引用给自动更新管理器
+    autoUpdaterManager.setMainWindow(mainWindow)
 
     // 窗口关闭事件
     mainWindow.on('closed', () => {
@@ -70,13 +95,19 @@ function createWindow() {
  */
 async function initialize() {
     try {
-        // 初始化 SQLite 数据库
+        // 初始化 SQLite 数据库（sql.js 需要异步加载 WebAssembly）
         sqliteManager = new SQLiteManager()
+        await sqliteManager.waitForInit()
         console.log('✅ SQLite 数据库初始化成功')
 
         // 确保 LiveMonitor 实例被创建（会自动注册 IPC 处理器）
         if (liveMonitor) {
             console.log('✅ LiveMonitor 已初始化')
+        }
+
+        // 确保直播监控窗口管理器被创建
+        if (liveRoomWindowManager) {
+            console.log('✅ LiveRoomWindowManager 已初始化')
         }
 
         // 设置 IPC 处理器
@@ -96,6 +127,14 @@ async function initialize() {
 app.whenReady().then(async () => {
     await initialize()
     createWindow()
+
+    // 生产环境下，延迟3秒后检查更新（避免影响启动速度）
+    if (isPackaged) {
+        setTimeout(() => {
+            console.log('🔄 开始检查应用更新...')
+            autoUpdaterManager.checkForUpdates(true)
+        }, 3000)
+    }
 
     // macOS 特殊处理
     app.on('activate', () => {

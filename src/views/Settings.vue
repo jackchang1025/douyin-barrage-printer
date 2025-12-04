@@ -1,18 +1,7 @@
 <template>
-  <div class="settings-page">
-    <el-page-header @back="router.back()">
-      <template #content>
-        <span>系统设置</span>
-      </template>
-    </el-page-header>
-
-    <div class="content">
+  <MainLayout title="系统设置">
+    <div class="settings-content">
       <el-tabs>
-        <!-- 抖音账号 -->
-        <el-tab-pane label="抖音账号">
-          <DouyinAccount />
-        </el-tab-pane>
-
         <!-- 打印模板设置 (新) -->
         <el-tab-pane label="打印模板">
           <PrintTemplateSettings />
@@ -83,61 +72,6 @@
           </el-form>
         </el-tab-pane>
 
-        <!-- 过滤规则 -->
-        <el-tab-pane label="过滤规则">
-          <el-form :model="printerStore.settings" label-width="120px">
-            <el-form-item label="仅打印礼物">
-              <el-switch v-model="printerStore.settings.filter_gift_only" />
-            </el-form-item>
-
-            <el-form-item label="最低用户等级">
-              <el-input-number
-                v-model="printerStore.settings.filter_min_level"
-                :min="0"
-                :max="100"
-              />
-            </el-form-item>
-
-            <el-form-item label="最低礼物价值">
-              <el-input-number
-                v-model="printerStore.settings.filter_min_gift_value"
-                :min="0"
-                :step="10"
-              />
-              <span style="margin-left: 8px">抖币</span>
-            </el-form-item>
-
-            <el-form-item label="关键词过滤">
-              <el-tag
-                v-for="(keyword, index) in printerStore.settings.filter_keywords"
-                :key="index"
-                closable
-                @close="handleRemoveKeyword(index)"
-                style="margin-right: 8px"
-              >
-                {{ keyword }}
-              </el-tag>
-              <el-input
-                v-if="showKeywordInput"
-                v-model="newKeyword"
-                size="small"
-                style="width: 100px"
-                @keyup.enter="handleAddKeyword"
-                @blur="handleAddKeyword"
-              />
-              <el-button v-else size="small" @click="showKeywordInput = true">
-                + 添加关键词
-              </el-button>
-            </el-form-item>
-
-            <el-form-item>
-              <el-button type="primary" @click="handleSaveSettings">
-                保存设置
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
         <!-- 关于 -->
         <el-tab-pane label="关于">
           <el-descriptions title="应用信息" border>
@@ -157,22 +91,17 @@
         </el-tab-pane>
       </el-tabs>
     </div>
-  </div>
+  </MainLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { usePrinterStore } from '@/stores/printer'
-import DouyinAccount from '@/components/DouyinAccount.vue'
 import PrintTemplateSettings from '@/components/PrintTemplateSettings.vue'
+import MainLayout from '@/layouts/MainLayout.vue'
 
-const router = useRouter()
 const printerStore = usePrinterStore()
-
-const showKeywordInput = ref(false)
-const newKeyword = ref('')
 
 onMounted(async () => {
   await printerStore.loadPrinters()
@@ -191,51 +120,28 @@ const handleSaveSettings = async () => {
 const handleTestPrint = async () => {
   await printerStore.printTestPage()
 }
-
-const handleAddKeyword = () => {
-  if (newKeyword.value && !printerStore.settings.filter_keywords.includes(newKeyword.value)) {
-    printerStore.settings.filter_keywords.push(newKeyword.value)
-  }
-  newKeyword.value = ''
-  showKeywordInput.value = false
-}
-
-const handleRemoveKeyword = (index: number) => {
-  printerStore.settings.filter_keywords.splice(index, 1)
-}
 </script>
 
 <style scoped>
-.settings-page {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  box-sizing: border-box;
-  background: var(--el-bg-color);
-}
-
-.content {
-  flex: 1;
-  margin-top: 20px;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.content :deep(.el-tabs) {
+.settings-content {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.content :deep(.el-tabs__content) {
+.settings-content :deep(.el-tabs) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-content :deep(.el-tabs__content) {
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 
-.content :deep(.el-tab-pane) {
+.settings-content :deep(.el-tab-pane) {
   height: 100%;
   overflow: auto;
 }

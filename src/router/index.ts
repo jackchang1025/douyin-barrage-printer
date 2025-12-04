@@ -22,13 +22,13 @@ const routes: RouteRecordRaw[] = [
         path: '/live-room',
         name: 'LiveRoom',
         component: () => import('@/views/LiveRoom.vue'),
-        meta: { requiresAuth: true },
-    },
-    {
-        path: '/live-room-dycast',
-        name: 'LiveRoomDycast',
-        component: () => import('@/views/LiveRoomDycast.vue'),
-        meta: { requiresAuth: false }, // dycast 不需要登录
+        meta: {
+            // 子窗口不需要认证检查（由主窗口负责验证）
+            // 用户只能通过主窗口的"直播监控"按钮打开此页面，
+            // 主窗口已经验证过登录状态
+            requiresAuth: false,
+            isIndependentWindow: true
+        },
     },
     {
         path: '/history',

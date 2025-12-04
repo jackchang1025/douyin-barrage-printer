@@ -198,6 +198,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'chat',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
@@ -211,6 +213,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'gift',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
@@ -228,6 +232,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'like',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         count: Number(msg.count || 1),
@@ -242,6 +248,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'member',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
@@ -256,6 +264,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'social',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
@@ -271,6 +281,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'chat',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
@@ -285,6 +297,8 @@ export class ProtobufParserDycast {
                     return {
                         type: 'fansclub',
                         userId: msg.user?.secUid || msg.user?.id || '',
+                        shortId: msg.user?.shortId || '',
+                        displayId: msg.user?.displayId || '',
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         content: msg.content || '加入了粉丝团',

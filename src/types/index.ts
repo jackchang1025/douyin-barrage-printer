@@ -12,15 +12,30 @@ export interface ElectronAPI {
 
   // 数据库
   insertBarrage: (barrage: BarrageInput) => Promise<number>
+  updateBarrageUserNo: (barrageId: number, userNo: number) => Promise<boolean>
   getBarrages: (roomId?: string, limit?: number) => Promise<Barrage[]>
   addToPrintQueue: (barrageId: number) => Promise<number>
   markAsPrinted: (barrageId: number) => Promise<boolean>
-  getStatistics: (roomId?: string) => Promise<Statistics>
+  getStatistics: (options?: StatisticsFilterOptions) => Promise<Statistics>
   getPrintSettings: () => Promise<PrintSettings>
   savePrintSettings: (settings: PrintSettings) => Promise<boolean>
   createLiveSession: (session: LiveSessionInput) => Promise<number>
   endLiveSession: (sessionId: number) => Promise<boolean>
   cleanOldData: (days: number) => Promise<number>
+  queryBarrages: (options: BarrageQueryOptions) => Promise<BarrageQueryResult>
+  getBarrageTypeStats: (options?: BarrageTypeStatsFilterOptions) => Promise<BarrageTypeStat[]>
+  getUserRanking: (options: UserRankingOptions) => Promise<UserRankingItem[]>
+  exportBarrages: (options: ExportOptions) => Promise<Barrage[]>
+  getTimeRangeStats: (startTime: number, endTime: number, roomId?: string) => Promise<Statistics>
+  deleteBarrages: (ids: number[]) => Promise<number>
+  deleteAllBarrages: () => Promise<number>
+
+  // 打印模板管理
+  getTemplates: () => Promise<PrintTemplate[]>
+  getTemplate: (id: string) => Promise<PrintTemplate | null>
+  saveTemplate: (template: PrintTemplate) => Promise<{ success: boolean; id?: string; message?: string }>
+  deleteTemplate: (id: string) => Promise<{ success: boolean; message?: string }>
+  setDefaultTemplate: (id: string) => Promise<{ success: boolean; message?: string }>
 
   // 抖音
   openDouyinLogin: () => Promise<any>
@@ -62,6 +77,12 @@ export interface ElectronAPI {
   // 心跳
   startHeartbeat: () => Promise<any>
   stopHeartbeat: () => Promise<any>
+
+  // 窗口管理
+  openLiveRoomWindow: () => Promise<{ success: boolean; message: string }>
+  closeLiveRoomWindow: () => Promise<{ success: boolean; message: string }>
+  getLiveRoomWindowStatus: () => Promise<{ isOpen: boolean; isMonitoring: boolean }>
+  onLiveRoomWindowClosed: (callback: () => void) => () => void
 }
 
 // 弹幕
@@ -70,15 +91,19 @@ export interface Barrage {
   room_id: string
   room_title?: string
   user_id: string
+  short_id?: string       // 抖音号（短ID，数字形式）
+  display_id?: string     // 抖音号（显示ID，可自定义的字符串形式）
+  user_no?: number        // 本场直播用户编号
   nickname: string
   user_level: number
   avatar_url?: string
   content: string
-  type: 'text' | 'gift' | 'like' | 'follow' | 'share'
+  type: 'text' | 'chat' | 'gift' | 'like' | 'member' | 'follow' | 'social' | 'fansclub' | 'share'
   gift_id?: string
   gift_name?: string
   gift_count?: number
   gift_value?: number
+  has_badge?: boolean     // 是否有灯牌
   created_at: number
   is_printed: number
   printed_at?: number
@@ -89,6 +114,9 @@ export interface BarrageInput {
   roomId?: string
   roomTitle?: string
   userId: string
+  shortId?: string       // 抖音号（短ID）
+  displayId?: string     // 抖音号（显示ID）
+  userNo?: number        // 本场直播用户编号
   nickname: string
   userLevel?: number
   avatarUrl?: string
@@ -137,6 +165,88 @@ export interface Statistics {
   unique_users: number
 }
 
+// 弹幕查询选项
+export interface BarrageQueryOptions {
+  roomId?: string
+  type?: string
+  nickname?: string
+  keyword?: string
+  startTime?: number
+  endTime?: number
+  isPrinted?: boolean
+  page?: number
+  pageSize?: number
+  orderBy?: 'created_at' | 'gift_value'
+  orderDir?: 'ASC' | 'DESC'
+}
+
+// 弹幕查询结果
+export interface BarrageQueryResult {
+  data: Barrage[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+// 弹幕类型统计
+export interface BarrageTypeStat {
+  type: string
+  count: number
+  printed_count: number
+}
+
+// 统计筛选选项
+export interface StatisticsFilterOptions {
+  roomId?: string
+  type?: string
+  nickname?: string
+  keyword?: string
+  startTime?: number
+  endTime?: number
+  isPrinted?: boolean
+}
+
+// 弹幕类型统计筛选选项
+export interface BarrageTypeStatsFilterOptions {
+  roomId?: string
+  nickname?: string
+  keyword?: string
+  startTime?: number
+  endTime?: number
+  isPrinted?: boolean
+}
+
+// 用户排行选项
+export interface UserRankingOptions {
+  roomId?: string
+  type?: string
+  keyword?: string
+  startTime?: number
+  endTime?: number
+  isPrinted?: boolean
+  limit?: number
+  orderBy?: 'barrage_count' | 'gift_value'
+}
+
+// 用户排行项
+export interface UserRankingItem {
+  user_id: string
+  nickname: string
+  avatar_url?: string
+  barrage_count: number
+  total_gift_value: number
+  user_level: number
+}
+
+// 导出选项
+export interface ExportOptions {
+  roomId?: string
+  type?: string
+  startTime?: number
+  endTime?: number
+}
+
 // 打印机连接类型
 export type PrinterConnectionType = 'usb' | 'network' | 'system'
 
@@ -171,11 +281,17 @@ export interface PrintOptions {
 // 弹幕打印数据
 export interface BarragePrintData {
   id?: number
+  user_id?: string
+  display_id?: string
+  user_no?: number  // 本场直播用户编号
   nickname: string
   content: string
-  type: 'text' | 'gift' | 'like' | 'follow' | 'share'
+  type: 'text' | 'chat' | 'gift' | 'like' | 'member' | 'follow' | 'social' | 'fansclub' | 'share'
   giftName?: string
   giftCount?: number
+  gift_value?: number
+  user_level?: number
+  has_badge?: boolean
   timestamp?: number
 }
 
@@ -209,12 +325,37 @@ export interface PrintTemplateField {
   customText?: string
 }
 
+// 打印模板
+export interface PrintTemplate {
+  id: string                        // 模板唯一 ID
+  name: string                      // 模板名称
+  description?: string              // 模板描述
+  isDefault?: boolean               // 是否默认模板
+  paperWidth: number                // 纸张宽度 (mm)
+  paperHeight: number               // 纸张高度 (mm)
+  fields: PrintTemplateField[]      // 模板字段
+  createdAt: number                 // 创建时间
+  updatedAt: number                 // 更新时间
+}
+
+// 过滤模式
+export type FilterMode = 'keyword_number' | 'only_keyword_number' | 'keyword_only' | 'number_only' | 'all'
+
 // 打印设置
 export interface PrintSettings {
   printer_name: string
   auto_print: boolean
   print_font_size: number
+  // 新版过滤规则
+  filter_mode?: FilterMode
   filter_keywords: string[]
+  filter_require_badge?: boolean       // 无灯牌不打印
+  filter_limit_count?: number          // 限制前 X 位打印
+  filter_dedupe_seconds?: number       // X 秒内相同数字不重复
+  filter_number_min?: number           // 数字范围最小值
+  filter_number_max?: number           // 数字范围最大值
+  user_no_start?: number               // 用户编号起始值（默认 1）
+  // 旧版过滤规则（兼容）
   filter_min_level: number
   filter_gift_only: boolean
   filter_min_gift_value: number
@@ -222,6 +363,8 @@ export interface PrintSettings {
   template_footer: string
   queue_max_size: number
   template_fields?: PrintTemplateField[]
+  // 多模板支持
+  current_template_id?: string         // 当前使用的模板 ID
 }
 
 // 用户

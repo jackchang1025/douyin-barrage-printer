@@ -1,11 +1,11 @@
 <template>
   <div class="login-container">
-    <!-- 开发环境提示 -->
+    <!-- 开发环境提示（需要启动 mock server: npm run mock） -->
     <!-- <el-alert
       v-if="isDev"
       type="info"
-      title="开发模式"
-      description="当前为开发环境，无需真实账号，直接输入任意邮箱密码即可登录（使用模拟数据）"
+      title="开发环境"
+      description="请确保 Mock Server 已启动（npm run mock），任意邮箱密码即可登录"
       :closable="false"
       style="margin-bottom: 20px; max-width: 450px"
       show-icon
@@ -141,12 +141,13 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { isDevelopment } from '@/utils/apiConfig'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-// 开发模式标识
-const isDev = import.meta.env.DEV
+// 是否为开发环境
+const isDev = isDevelopment()
 
 // 表单引用
 const formRef = ref<FormInstance>()
@@ -172,11 +173,11 @@ const showRegisterDialog = ref(false)
 // 表单验证规则
 const rules: FormRules = {
   email: [
-    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
+    { required: false, message: '请输入邮箱地址', trigger: 'blur' },
     { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
+    { required: false, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少6位', trigger: 'blur' },
   ],
 }

@@ -11,16 +11,19 @@ import { protobufParserDycast } from './protobuf-parser-dycast'
  */
 export interface BarrageData {
   userId: string
+  shortId?: string       // 抖音号（短ID，数字形式）
+  displayId?: string     // 抖音号（显示ID，可自定义的字符串形式）
   nickname: string
   userLevel: number
   avatarUrl: string
   content: string
-  type: 'text' | 'gift' | 'like' | 'follow' | 'share'
+  type: 'text' | 'chat' | 'gift' | 'like' | 'member' | 'follow' | 'social' | 'fansclub' | 'share'
   timestamp: number
   giftId?: string
   giftName?: string
   giftCount?: number
   giftValue?: number
+  hasBadge?: boolean     // 是否有灯牌
 }
 
 /**
@@ -141,21 +144,33 @@ export class BarrageHandler {
 
   /**
    * 转换 Protobuf 消息为弹幕格式（用于 IPC 传递）
+   * 
+   * 类型说明：
+   * - chat/text: 普通弹幕消息
+   * - gift: 礼物
+   * - like: 点赞
+   * - member: 进入直播间
+   * - follow/social: 关注主播
+   * - fansclub: 加入粉丝团
+   * - share: 分享
    */
   convertToBarrageData(msg: any): BarrageData | null {
     if (!msg) return null
 
     const base = {
       userId: msg.userId || '0',
+      shortId: msg.shortId || '',
+      displayId: msg.displayId || '',
       nickname: msg.nickname || '未知',
       userLevel: msg.userLevel || 0,
       avatarUrl: msg.avatarUrl || '',
-      timestamp: msg.timestamp || Date.now()
+      timestamp: msg.timestamp || Date.now(),
+      hasBadge: msg.hasBadge || false
     }
 
     switch (msg.type) {
       case 'chat':
-        return { ...base, type: 'text', content: msg.content || '[消息]' }
+        return { ...base, type: 'chat', content: msg.content || '[消息]' }
       case 'gift':
         return {
           ...base, type: 'gift',
@@ -168,11 +183,16 @@ export class BarrageHandler {
       case 'like':
         return { ...base, type: 'like', content: `点赞 x${msg.count || 1}` }
       case 'member':
-        return { ...base, type: 'follow', content: '进入直播间' }
+        // 进入直播间 - 保持 member 类型
+        return { ...base, type: 'member', content: '进入直播间' }
       case 'social':
-        return { ...base, type: 'follow', content: '关注了主播' }
+        // 关注主播 - 保持 social 类型（也可以映射到 follow）
+        return { ...base, type: 'social', content: '关注了主播' }
       case 'fansclub':
-        return { ...base, type: 'follow', content: msg.content || '加入粉丝团' }
+        // 加入粉丝团
+        return { ...base, type: 'fansclub', content: msg.content || '加入粉丝团' }
+      case 'share':
+        return { ...base, type: 'share', content: '分享了直播间' }
       default:
         return null
     }

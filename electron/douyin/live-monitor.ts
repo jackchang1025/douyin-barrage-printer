@@ -4,7 +4,8 @@
  * 使用 CDP (Chrome DevTools Protocol) 拦截 WebSocket 消息
  */
 
-import { BrowserWindow, BrowserView, ipcMain } from 'electron'
+import { BrowserWindow, BrowserView, ipcMain, session } from 'electron'
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 import { cdpInterceptor } from './cdp-interceptor'
 
 // 重新导出 BarrageData 类型，保持向后兼容
@@ -82,7 +83,7 @@ export class LiveMonitor {
       // 使用 CDP 拦截器捕获 WebSocket 消息
       cdpInterceptor.attach(this.browserView)
 
-      // 加载页面
+      // 加载页面（User-Agent 已在 session 级别设置）
       await this.browserView.webContents.loadURL(loadUrl)
 
       // 延迟打印状态
@@ -204,6 +205,10 @@ export class LiveMonitor {
     })
 
     this.window.setBrowserView(this.browserView)
+
+    // 设置整个 session 的 User-Agent，覆盖所有请求（包括 WebSocket 握手）
+    const douyinSession = session.fromPartition('persist:douyin')
+    douyinSession.setUserAgent(CHROME_UA)
 
     // 注意：不打开 DevTools，避免大量 console.assert 错误
     // 如需调试，取消下面注释：

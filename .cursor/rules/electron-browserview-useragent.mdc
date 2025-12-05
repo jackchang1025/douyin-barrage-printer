@@ -1,0 +1,175 @@
+---
+alwaysApply: true
+---
+# Electron BrowserView User-Agent 伪装规则
+
+## 问题背景
+
+本项目使用 Electron BrowserView 加载抖音直播页面：
+- **监控窗口**: 通过 BrowserView 加载 `live.douyin.com`
+- **目的**: 捕获直播间的弹幕、礼物等 WebSocket 消息
+
+**关键问题**：Electron 的默认 User-Agent 包含 `Electron/...` 标识：
+
+```
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Electron/28.0.0 Safari/537.36
+                                                                                ^^^^^^^^^^^^^^
+                                                                                网站可以识别这个！
+```
+
+抖音等网站会根据这个标识：
+- 将设备标记为 "Electron" 而非 "Chrome"
+- 可能触发反爬虫机制
+- 可能限制某些功能或推送不同的页面版本
+
+## 正确的解决方案
+
+### 使用 `session.setUserAgent()` ✅
+
+在 session 级别设置 User-Agent，这会影响该 session 下的 **所有请求**：
+
+```typescript
+// electron/douyin/live-monitor.ts
+import { session } from 'electron'
+
+// 定义标准 Chrome User-Agent（不含 Electron 标识）
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+// 创建 BrowserView 时使用独立 partition
+this.browserView = new BrowserView({
+  webPreferences: {
+    partition: 'persist:douyin',  // 使用独立 session
+    nodeIntegration: false,
+    contextIsolation: false
+  }
+})
+
+// ✅ 正确：在 session 级别设置 User-Agent
+const douyinSession = session.fromPartition('persist:douyin')
+douyinSession.setUserAgent(CHROME_UA)
+
+// 加载页面（不需要再传 userAgent 参数）
+await this.browserView.webContents.loadURL(loadUrl)
+```
+
+### 为什么使用 `session.setUserAgent()`？
+
+| 覆盖范围 | 说明 |
+|---------|------|
+| 页面导航请求 | ✅ 主文档加载 |
+| XHR/Fetch 请求 | ✅ AJAX 请求 |
+| WebSocket 握手 | ✅ **关键！** 弹幕推送使用 WebSocket |
+| 子资源加载 | ✅ 图片、CSS、JS 等 |
+
+## 错误的做法 ❌
+
+### 1. 仅在 loadURL 时传入 userAgent
+
+```typescript
+// ❌ 错误：只影响主文档加载，不影响后续请求
+await this.browserView.webContents.loadURL(loadUrl, { userAgent: CHROME_UA })
+```
+
+**问题**：后续的 XHR、Fetch、WebSocket 请求可能仍使用默认 UA。
+
+### 2. 使用 webRequest.onBeforeSendHeaders
+
+```typescript
+// ❌ 不推荐：对 WebSocket 握手请求可能无效
+douyinSession.webRequest.onBeforeSendHeaders((details, callback) => {
+  details.requestHeaders['User-Agent'] = CHROME_UA
+  callback({ requestHeaders: details.requestHeaders })
+})
+```
+
+**问题**：
+- `onBeforeSendHeaders` 对 WebSocket 握手请求的拦截不完整
+- 代码冗余，需要回调函数
+- 每次创建窗口都会注册监听器
+
+### 3. 在 BrowserWindow 级别设置（无效）
+
+```typescript
+// ❌ 错误：BrowserWindow 的 webPreferences 对 BrowserView 无效
+this.window = new BrowserWindow({
+  webPreferences: {
+    // 这只影响 window 本身，不影响 BrowserView！
+  }
+})
+```
+
+## User-Agent 版本维护
+
+Chrome 版本会定期更新，建议：
+
+1. **定期更新 UA 字符串**：每隔几个月检查最新 Chrome 版本
+2. **获取最新 UA**：访问 https://www.whatismybrowser.com/detect/what-is-my-user-agent
+3. **版本号格式**：`Chrome/131.0.0.0` - 主版本.次版本.修订版本.补丁版本
+
+```typescript
+// 当前使用的 UA（Chrome 131）
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+```
+
+## 完整示例
+
+```typescript
+import { BrowserWindow, BrowserView, session } from 'electron'
+
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+class LiveMonitor {
+  private browserView: BrowserView | null = null
+
+  async createWindow(): Promise<void> {
+    const window = new BrowserWindow({
+      width: 1024,
+      height: 768,
+      // ...
+    })
+
+    // 1. 创建 BrowserView（使用独立 partition）
+    this.browserView = new BrowserView({
+      webPreferences: {
+        partition: 'persist:douyin',
+        nodeIntegration: false,
+        contextIsolation: false
+      }
+    })
+
+    window.setBrowserView(this.browserView)
+
+    // 2. ✅ 设置 session 级别的 User-Agent
+    const douyinSession = session.fromPartition('persist:douyin')
+    douyinSession.setUserAgent(CHROME_UA)
+
+    // 3. 加载页面
+    await this.browserView.webContents.loadURL('https://live.douyin.com/123456')
+  }
+}
+```
+
+## 检查清单
+
+实现 User-Agent 伪装时，确保：
+
+- [ ] 定义完整的 Chrome User-Agent 常量（不含 Electron 标识）
+- [ ] BrowserView 使用独立的 partition（如 `persist:douyin`）
+- [ ] 使用 `session.fromPartition()` 获取对应的 session
+- [ ] 调用 `session.setUserAgent()` 设置 UA
+- [ ] 在 `setUserAgent()` 之后再调用 `loadURL()`
+- [ ] `loadURL()` 不需要再传 `userAgent` 参数（冗余）
+- [ ] 不使用 `webRequest.onBeforeSendHeaders` 修改 UA
+
+## 调试验证
+
+可以通过以下方式验证 User-Agent 是否生效：
+
+1. **DevTools Network 面板**：查看请求头中的 User-Agent
+2. **WebSocket 握手**：检查 WebSocket 连接的请求头
+3. **在线检测工具**：在 BrowserView 中访问 https://www.whatismybrowser.com/
+
+## 相关文件
+
+- `electron/douyin/live-monitor.ts` - 直播监控器（BrowserView 创建和 UA 设置）
+- `electron/douyin/cdp-interceptor.ts` - CDP 拦截器（WebSocket 消息捕获）

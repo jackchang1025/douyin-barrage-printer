@@ -209,4 +209,3 @@ process.on('unhandledRejection', (reason) => {
 
 // 导出供测试使用
 export { mainWindow, sqliteManager }
-

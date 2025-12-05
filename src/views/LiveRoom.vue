@@ -73,6 +73,7 @@ import TemplateSelector from '@/components/LiveRoom/TemplateSelector.vue'
 import PrinterSelector from '@/components/LiveRoom/PrinterSelector.vue'
 import { useBarrageStore } from '@/stores/barrage'
 import { usePrinterStore } from '@/stores/printer'
+import { hasUserBadge } from '@/utils/barrage'
 
 const barrageStore = useBarrageStore()
 const printerStore = usePrinterStore()
@@ -393,7 +394,7 @@ const handleStart = async () => {
         gift_value: barrage.giftValue || barrage.gift_value,
         user_level: barrage.userLevel || barrage.user_level || 0,
         avatar_url: barrage.avatarUrl || barrage.avatar_url || '',
-        has_badge: barrage.hasBadge || barrage.has_badge || false, // 是否有灯牌
+        has_badge: hasUserBadge(barrage.user), // 通过 user.fansClub.data.level 判断是否有灯牌
         timestamp: barrage.timestamp || Date.now(),
         is_printed: 0,
       }

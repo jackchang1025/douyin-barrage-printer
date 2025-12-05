@@ -2,6 +2,52 @@
  * 类型定义
  */
 
+// ==================== 抖音用户类型 ====================
+
+/**
+ * 抖音用户粉丝团数据
+ */
+export interface DouyinFansClubData {
+  level?: number              // 灯牌等级 (1-30)
+  /**
+   * 粉丝团状态
+   * - 1: 亮灯状态（活跃粉丝团成员）
+   * - 2: 灭灯状态（灰色灯牌，非活跃成员）
+   */
+  userFansClubStatus?: number
+  badge?: {
+    icons?: Record<string, { urlList?: string[]; uri?: string }>
+  }
+  anchorId?: string           // 主播ID
+}
+
+/**
+ * 抖音用户粉丝团信息
+ */
+export interface DouyinFansClub {
+  data?: DouyinFansClubData
+}
+
+/**
+ * 抖音直播间用户（简化版，用于渲染进程）
+ * 完整版定义在 electron/douyin/dycast-model.ts 的 User 接口
+ */
+export interface DouyinUser {
+  id?: string                 // 用户唯一标识ID
+  shortId?: string            // 抖音号（短ID，数字形式）
+  displayId?: string          // 抖音号（显示ID，可自定义）
+  nickname?: string           // 昵称
+  avatarThumb?: {
+    urlList?: string[]
+  }
+  fansClub?: DouyinFansClub   // 粉丝团信息（用于判断是否有灯牌）
+  payGrade?: {
+    level?: number            // 付费等级
+  }
+}
+
+// ==================== Electron API 类型 ====================
+
 // ElectronAPI 类型（与 preload.ts 对应）
 export interface ElectronAPI {
   // 系统

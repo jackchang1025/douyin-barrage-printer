@@ -204,7 +204,9 @@ export class ProtobufParserDycast {
                         userLevel: msg.user?.payGrade?.level || 0,
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
                         content: msg.content || '',
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: (msg.user?.fansClub?.data?.level ?? 0) > 0 && msg.user?.fansClub?.data?.userFansClubStatus === 1,
                     }
                 }
 
@@ -223,7 +225,9 @@ export class ProtobufParserDycast {
                         giftCount: Number(msg.repeatCount || msg.comboCount || 1),
                         giftValue: msg.gift?.diamondCount || 0,
                         giftIcon: msg.gift?.image?.urlList?.[0] || '',
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: (msg.user?.fansClub?.data?.level ?? 0) > 0 && msg.user?.fansClub?.data?.userFansClubStatus === 1,
                     }
                 }
 
@@ -239,7 +243,9 @@ export class ProtobufParserDycast {
                         count: Number(msg.count || 1),
                         total: Number(msg.total || 0),
                         content: `点赞 x${msg.count || 1}`,
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: (msg.user?.fansClub?.data?.level ?? 0) > 0 && msg.user?.fansClub?.data?.userFansClubStatus === 1,
                     }
                 }
 
@@ -255,7 +261,9 @@ export class ProtobufParserDycast {
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
                         content: '进入直播间',
                         memberCount: Number(msg.memberCount || 0),
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: (msg.user?.fansClub?.data?.level ?? 0) > 0 && msg.user?.fansClub?.data?.userFansClubStatus === 1,
                     }
                 }
 
@@ -271,7 +279,9 @@ export class ProtobufParserDycast {
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
                         content: '关注了主播',
                         followCount: Number(msg.followCount || 0),
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: (msg.user?.fansClub?.data?.level ?? 0) > 0 && msg.user?.fansClub?.data?.userFansClubStatus === 1,
                     }
                 }
 
@@ -288,7 +298,9 @@ export class ProtobufParserDycast {
                         avatarUrl: msg.user?.avatarThumb?.urlList?.[0] || '',
                         content: '[表情]',
                         emojiUrl: emojiUrl,
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: (msg.user?.fansClub?.data?.level ?? 0) > 0 && msg.user?.fansClub?.data?.userFansClubStatus === 1,
                     }
                 }
 
@@ -302,7 +314,9 @@ export class ProtobufParserDycast {
                         nickname: msg.user?.nickname || '未知用户',
                         userLevel: msg.user?.payGrade?.level || 0,
                         content: msg.content || '加入了粉丝团',
+                        user: msg.user,
                         timestamp: Date.now(),
+                        hasBadge: true,  // 粉丝团消息本身就意味着有灯牌
                     }
                 }
 

@@ -5,6 +5,7 @@
 
 import { ipcMain } from 'electron'
 import { protobufParserDycast } from './protobuf-parser-dycast'
+import type { User } from './dycast-model'
 
 /**
  * 弹幕数据接口
@@ -16,6 +17,7 @@ export interface BarrageData {
   nickname: string
   userLevel: number
   avatarUrl: string
+  user?: User            // 完整的用户对象（包含 fansClub 等信息）
   content: string
   type: 'text' | 'chat' | 'gift' | 'like' | 'member' | 'follow' | 'social' | 'fansclub' | 'share'
   timestamp: number
@@ -164,6 +166,7 @@ export class BarrageHandler {
       nickname: msg.nickname || '未知',
       userLevel: msg.userLevel || 0,
       avatarUrl: msg.avatarUrl || '',
+      user: msg.user,
       timestamp: msg.timestamp || Date.now(),
       hasBadge: msg.hasBadge || false
     }

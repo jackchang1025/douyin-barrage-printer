@@ -1,8 +1,5 @@
 <template>
   <div class="main-layout">
-    <!-- 自动更新提示条 -->
-    <AppUpdater :show-bar="true" class="update-bar-container" />
-    
     <!-- 主体区域（侧边栏 + 内容） -->
     <div class="layout-body">
       <!-- 侧边栏 -->
@@ -98,7 +95,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import AppUpdater from '@/components/AppUpdater.vue'
 import {
   HomeFilled,
   Document,

@@ -47,6 +47,9 @@ export class SQLiteManager {
     // 初始化表结构
     this.initSchema()
 
+    // 初始化默认模板（如果没有模板）
+    this.initDefaultTemplates()
+
     console.log('✅ SQLite 数据库初始化完成')
   }
 
@@ -156,6 +159,106 @@ export class SQLiteManager {
     `)
 
     console.log('✅ 数据库表结构校验完成')
+  }
+
+  /**
+   * 初始化默认打印模板
+   * 只在没有任何模板时创建预设模板
+   */
+  private initDefaultTemplates(): void {
+    try {
+      // 检查是否已有模板
+      const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM print_templates')
+      const result = countStmt.get() as { count: number }
+
+      if (result.count > 0) {
+        console.log(`📋 已有 ${result.count} 个模板，跳过初始化`)
+        return
+      }
+
+      console.log('📋 初始化默认打印模板...')
+      const now = Date.now()
+
+      // 预设模板数据（基于用户创建的模板）
+      const defaultTemplates = [
+        {
+          id: 'template-40x30',
+          name: '40x30',
+          description: '40mm x 30mm 标准小票模板',
+          isDefault: true,
+          paperWidth: 40,
+          paperHeight: 30,
+          fields: [
+            { id: 'text', i: 'text_1', label: '自定义文本', visible: true, x: 1, y: 1, w: 39, h: 5, style: { fontSize: 10, align: 'center', bold: true }, customText: '店铺名称', _designer: { width: 39, height: 5, border: false, fontSize: 10 } },
+            { id: 'id', i: 'id_1', label: '弹幕ID', visible: true, x: 2, y: 5, w: 23, h: 5, style: { fontSize: 10, align: 'left', bold: true }, _designer: { width: 23, height: 5, border: false, fontSize: 10 } },
+            { id: 'nickname', i: 'nickname_1', label: '昵称', visible: true, x: 2, y: 10, w: 38, h: 4, style: { fontSize: 10, align: 'left', bold: true }, _designer: { width: 38, height: 4, border: false, fontSize: 10 } },
+            { id: 'user_no', i: 'user_no_1', label: '', visible: true, x: 27, y: 6, w: 13, h: 5, style: { fontSize: 13, align: 'left', bold: true }, _designer: { width: 13, height: 5, border: false, fontSize: 13 } },
+            { id: 'content', i: 'content_1', label: '弹幕', visible: true, x: 2, y: 14, w: 38, h: 5, style: { fontSize: 10, align: 'left', bold: true }, _designer: { width: 38, height: 5, border: false, fontSize: 10 } },
+            { id: 'qrcode', i: 'qrcode_1', label: '二维码', visible: true, x: 29, y: 22, w: 10, h: 8, style: { fontSize: 12, align: 'center', bold: false }, qrcodeSource: 'display_id', qrcodeErrorLevel: 'Q', _designer: { width: 10, height: 8, border: false, fontSize: 12 } },
+            { id: 'time', i: 'time_1', label: '', visible: true, x: 1, y: 25, w: 28, h: 5, style: { fontSize: 8, align: 'left', bold: false }, timeFormat: 'YYYY/MM/DD HH:mm:ss', _designer: { width: 28, height: 5, border: false, fontSize: 8 } }
+          ]
+        },
+        {
+          id: 'template-50x40',
+          name: '50x40',
+          description: '50mm x 40mm 中等尺寸模板',
+          isDefault: false,
+          paperWidth: 50,
+          paperHeight: 40,
+          fields: [
+            { id: 'text', i: 'text_1', label: '自定义文本', visible: true, x: 1, y: 1, w: 39, h: 5, style: { fontSize: 10, align: 'center', bold: true }, customText: '店铺名称', _designer: { width: 39, height: 5, border: false, fontSize: 10 } },
+            { id: 'id', i: 'id_1', label: '弹幕ID', visible: true, x: 2, y: 6, w: 23, h: 4, style: { fontSize: 10, align: 'left', bold: false }, _designer: { width: 23, height: 4, border: false, fontSize: 10 } },
+            { id: 'nickname', i: 'nickname_1', label: '昵称', visible: true, x: 1, y: 10, w: 38, h: 5, style: { fontSize: 10, align: 'left', bold: true }, _designer: { width: 38, height: 5, border: false, fontSize: 10 } },
+            { id: 'user_no', i: 'user_no_1', label: '', visible: true, x: 27, y: 6, w: 13, h: 5, style: { fontSize: 12, align: 'left', bold: false }, _designer: { width: 13, height: 5, border: false, fontSize: 12 } },
+            { id: 'content', i: 'content_1', label: '弹幕', visible: true, x: 1, y: 15, w: 38, h: 6, style: { fontSize: 10, align: 'left', bold: false }, _designer: { width: 38, height: 6, border: false, fontSize: 10 } },
+            { id: 'qrcode', i: 'qrcode_1', label: '二维码', visible: true, x: 29, y: 21, w: 10, h: 9, style: { fontSize: 12, align: 'center', bold: false }, qrcodeSource: 'display_id', qrcodeErrorLevel: 'M', _designer: { width: 10, height: 9, border: false, fontSize: 12 } },
+            { id: 'time', i: 'time_1', label: '', visible: true, x: 1, y: 25, w: 28, h: 5, style: { fontSize: 8, align: 'left', bold: false }, timeFormat: 'YYYY/MM/DD HH:mm:ss', _designer: { width: 28, height: 5, border: false, fontSize: 8 } }
+          ]
+        },
+        {
+          id: 'template-60x40',
+          name: '60x40',
+          description: '60mm x 40mm 大尺寸模板',
+          isDefault: false,
+          paperWidth: 60,
+          paperHeight: 40,
+          fields: [
+            { id: 'text', i: 'text_1', label: '自定义文本', visible: true, x: 1, y: 1, w: 39, h: 5, style: { fontSize: 10, align: 'center', bold: true }, customText: '店铺名称', _designer: { width: 39, height: 5, border: false, fontSize: 10 } },
+            { id: 'id', i: 'id_1', label: '弹幕ID', visible: true, x: 2, y: 6, w: 23, h: 4, style: { fontSize: 10, align: 'left', bold: false }, _designer: { width: 23, height: 4, border: false, fontSize: 10 } },
+            { id: 'nickname', i: 'nickname_1', label: '昵称', visible: true, x: 1, y: 10, w: 38, h: 5, style: { fontSize: 10, align: 'left', bold: true }, _designer: { width: 38, height: 5, border: false, fontSize: 10 } },
+            { id: 'user_no', i: 'user_no_1', label: '', visible: true, x: 27, y: 6, w: 13, h: 5, style: { fontSize: 12, align: 'left', bold: false }, _designer: { width: 13, height: 5, border: false, fontSize: 12 } },
+            { id: 'content', i: 'content_1', label: '弹幕', visible: true, x: 1, y: 15, w: 38, h: 6, style: { fontSize: 10, align: 'left', bold: false }, _designer: { width: 38, height: 6, border: false, fontSize: 10 } },
+            { id: 'qrcode', i: 'qrcode_1', label: '二维码', visible: true, x: 29, y: 21, w: 10, h: 9, style: { fontSize: 12, align: 'center', bold: false }, qrcodeSource: 'display_id', qrcodeErrorLevel: 'M', _designer: { width: 10, height: 9, border: false, fontSize: 12 } },
+            { id: 'time', i: 'time_1', label: '', visible: true, x: 1, y: 25, w: 28, h: 5, style: { fontSize: 8, align: 'left', bold: false }, timeFormat: 'YYYY/MM/DD HH:mm:ss', _designer: { width: 28, height: 5, border: false, fontSize: 8 } }
+          ]
+        }
+      ]
+
+      // 插入默认模板
+      const insertStmt = this.db.prepare(`
+        INSERT INTO print_templates (id, name, description, is_default, paper_width, paper_height, fields, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+
+      for (const template of defaultTemplates) {
+        insertStmt.run(
+          template.id,
+          template.name,
+          template.description,
+          template.isDefault ? 1 : 0,
+          template.paperWidth,
+          template.paperHeight,
+          JSON.stringify(template.fields),
+          now,
+          now
+        )
+        console.log(`  ✅ 创建模板: ${template.name}`)
+      }
+
+      console.log(`📋 已创建 ${defaultTemplates.length} 个默认模板`)
+    } catch (error) {
+      console.error('❌ 初始化默认模板失败:', error)
+    }
   }
 
   /**

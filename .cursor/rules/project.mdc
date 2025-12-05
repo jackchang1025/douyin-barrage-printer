@@ -1,0 +1,49 @@
+---
+alwaysApply: true
+---
+# Project Development Rules
+
+## 核心原则：逐步实现 (Step-by-Step Implementation)
+不要一次性生成完整的大功能。将大任务拆分为独立的、可测试的小单元。
+
+1.  **拆分 (Split)**: 将任务拆解为最小可交付单元（如单个函数、组件、API 端点）。
+2.  **定义 (Define)**: 明确每个单元的输入、输出、边界条件和验收标准。
+3.  **生成与测试 (Generate & Test)**: 先实现核心路径 (Happy Path)，再覆盖异常场景。立即运行测试。
+4.  **审查 (Review)**: 检查接口契约、错误处理、性能和安全性。
+5.  **组合 (Integrate)**: 将通过审查的单元组合，进行系统级验证。
+
+## 项目结构 (Project Structure)
+推荐按**职责**（业务功能）而非仅按技术栈组织代码，便于维护。
+
+- `src/features/`: (建议) 按业务功能划分，每个 feature 包含其专属的 api, hooks, components, tests 等。
+- `src/components/`: 通用可复用组件。
+- `src/views/`: 页面入口。
+- `src/services/`: 后端交互与 API 封装。
+- `src/types/`: 全局类型定义。
+- `electron/`: Electron 主进程相关代码。
+
+## 提示词指南 (Prompting Guidelines)
+在请求代码生成时，请明确以下内容：
+
+- **目标**: 要做什么、为什么要做、验收标准。
+- **约束**:
+    - 技术栈: Vue 3 + TypeScript + Vite + Element Plus + Pinia + Sass
+    - 运行环境: Electron + Better-SQLite3
+- **输入输出**: API 请求/响应示例、参数格式、错误码。
+- **测试**: 要求生成测试用例（正向、异常、边界），使用 Vitest。
+
+**示例**:
+> "实现 `auth/login` 逻辑：接受 `{email, password}`，返回 `{token}`。使用 Pinia 管理状态。请给出 Store action 实现、错误处理逻辑及单元测试。"
+
+## 代码规范 (Code Standards)
+- **单一职责原则**: 每个文件/函数只做一件事。拆分逻辑到不同文件中。
+- **样式**: 使用 Element Plus 组件库，配合 Sass 编写现代化的样式，界面美观简洁。
+- **测试驱动**: 核心逻辑必须包含测试 (Vitest)。
+- **错误处理**: 明确处理异常情况，避免静默失败。
+- **Electron IPC**: 主进程与渲染进程通信应类型安全。
+
+## Electron 多窗口注意事项
+- 本项目使用多窗口架构（主窗口 + 直播间窗口）
+- **Pinia Store 不能跨窗口共享**：每个 BrowserWindow 有独立的 Pinia 实例
+- 跨窗口状态同步必须使用 Electron IPC 广播机制
+- 详见规则文件: `electron-cross-window-sync.mdc`

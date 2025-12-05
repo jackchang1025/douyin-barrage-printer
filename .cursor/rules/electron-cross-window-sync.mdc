@@ -1,0 +1,135 @@
+---
+alwaysApply: true
+---
+# Electron 多窗口跨窗口状态同步规则
+
+## 问题背景
+
+本项目是一个多窗口 Electron 应用：
+- **主窗口**: Dashboard、Settings、PrintTemplateSettings 等页面
+- **直播间窗口**: LiveRoom.vue（独立 BrowserWindow）
+
+**关键问题**：每个 Electron BrowserWindow 都有独立的渲染进程，这意味着：
+- 每个窗口有独立的 Vue 应用实例
+- 每个窗口有独立的 Pinia Store 实例
+- **Pinia 的 watch 无法跨窗口检测变化！**
+
+## 正确的跨窗口同步模式
+
+### 1. 主进程广播事件
+
+当需要跨窗口同步状态时，在 IPC 处理器中广播事件给所有窗口：
+
+```typescript
+// electron/ipc/handlers.ts
+import { BrowserWindow } from 'electron'
+
+ipcMain.handle('template:save', (_event, template: any) => {
+    const result = sqliteManager.saveTemplate(template)
+    
+    // ✅ 正确：保存成功后广播事件给所有窗口
+    if (result.success) {
+        BrowserWindow.getAllWindows().forEach(window => {
+            window.webContents.send('template:updated', {
+                templateId: template.id,
+                timestamp: Date.now()
+            })
+        })
+    }
+    
+    return result
+})
+```
+
+### 2. Preload 暴露事件监听 API
+
+```typescript
+// electron/preload.ts
+onTemplateUpdated: (callback: (data: { templateId: string; timestamp: number }) => void) => {
+    const subscription = (_event: any, data: any) => callback(data)
+    ipcRenderer.on('template:updated', subscription)
+    return () => {
+        ipcRenderer.removeListener('template:updated', subscription)
+    }
+},
+```
+
+### 3. 渲染进程监听 IPC 事件
+
+```typescript
+// src/views/LiveRoom.vue
+onMounted(async () => {
+    // ✅ 正确：通过 IPC 事件监听跨窗口变化
+    unsubscribeTemplateUpdated = window.electronAPI.onTemplateUpdated(async (data) => {
+        console.log(`📢 收到模板更新事件: ${data.templateId}`)
+        await printerStore.refreshCurrentTemplate()
+    })
+})
+
+onUnmounted(() => {
+    // 记得清理监听器
+    if (unsubscribeTemplateUpdated) {
+        unsubscribeTemplateUpdated()
+    }
+})
+```
+
+## 错误模式 ❌
+
+```typescript
+// ❌ 错误：Pinia watch 无法跨窗口工作！
+watch(
+  () => printerStore.templateVersion,
+  async (newVersion) => {
+    // 这在多窗口环境下不会触发！
+    await printerStore.refreshCurrentTemplate()
+  }
+)
+```
+
+## 跨窗口同步流程图
+
+```
+主窗口 (Window A)                    直播间窗口 (Window B)
+    │                                      │
+    ▼                                      │
+saveTemplate()                             │
+    │                                      │
+    ▼                                      │
+IPC → 主进程                               │
+    │                                      │
+    ▼                                      │
+数据库保存成功                              │
+    │                                      │
+    ▼                                      │
+BrowserWindow.getAllWindows()              │
+    │                                      │
+    └──── send('template:updated') ───────→│
+                                           ▼
+                               onTemplateUpdated() 触发
+                                           │
+                                           ▼
+                               refreshCurrentTemplate()
+                                           │
+                                           ▼
+                               从数据库获取最新数据 ✅
+```
+
+## 检查清单
+
+实现跨窗口同步时，确保：
+
+- [ ] 在 `electron/ipc/handlers.ts` 中使用 `BrowserWindow.getAllWindows()` 广播事件
+- [ ] 在 `electron/preload.ts` 中暴露事件监听 API
+- [ ] 在 `src/types/index.ts` 中添加 API 类型定义
+- [ ] 在目标组件的 `onMounted` 中注册 IPC 事件监听
+- [ ] 在目标组件的 `onUnmounted` 中清理监听器
+- [ ] 事件处理器中从数据库/主进程获取最新数据（不要依赖 Pinia 缓存）
+
+## 相关文件
+
+- `electron/ipc/handlers.ts` - IPC 处理器和事件广播
+- `electron/preload.ts` - 渲染进程 API 暴露
+- `src/types/index.ts` - ElectronAPI 类型定义
+- `src/stores/printer.ts` - 打印模板 Store（含 refreshCurrentTemplate 方法）
+- `src/views/LiveRoom.vue` - 直播间窗口（监听模板更新事件）

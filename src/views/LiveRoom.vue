@@ -163,6 +163,51 @@ const printedCount = computed(() => {
   return barrageStore.barrages.filter(b => b.is_printed).length
 })
 
+// 注意：由于 LiveRoom.vue 运行在独立的 Electron 窗口中，
+// 它有自己独立的 Vue 应用和 Pinia store 实例。
+// 因此无法通过 watch printerStore.templateVersion 来检测主窗口中的模板变化。
+// 需要通过 Electron IPC 机制来接收跨窗口的模板更新事件。
+// 监听器在 onMounted 中注册，通过 window.electronAPI.onTemplateUpdated
+
+/**
+ * 获取当前打印模板配置（用于打印时）
+ * 直接从 store 的 currentTemplate computed 获取，确保数据是最新的
+ */
+const getPrintTemplateConfig = () => {
+  const template = printerStore.currentTemplate
+  
+  let templateFields = printerStore.settings.template_fields || []
+  let paperWidth = 40
+  let paperHeight = 30
+  
+  if (template) {
+    templateFields = template.fields || []
+    paperWidth = template.paperWidth || 40
+    paperHeight = template.paperHeight || 30
+  }
+  
+  // 转换字段格式用于打印
+  const fieldsForPrint = templateFields.map(item => ({
+    id: item.id,
+    label: item.label,
+    visible: item.visible,
+    x: item.x,
+    y: item.y,
+    w: item.w,
+    h: item.h,
+    style: item.style,
+    customText: item.customText || '',
+    _designer: (item as any)._designer
+  }))
+  
+  return {
+    fields: JSON.parse(JSON.stringify(fieldsForPrint)),
+    fontSize: printerStore.settings.print_font_size,
+    paperWidth,
+    paperHeight
+  }
+}
+
 // 清空弹幕（带确认对话框）
 const clearBarrages = async () => {
   if (barrageStore.barrages.length === 0) {
@@ -248,40 +293,13 @@ const handleManualPrint = async (barrage: any) => {
       timestamp: barrage.created_at || barrage.timestamp || Date.now(),
     }
     
-    // 获取当前模板设置
-    const currentTemplate = printerStore.currentTemplate
-    let templateFields = printerStore.settings.template_fields || []
-    let paperWidth = 40
-    let paperHeight = 30
-    
-    if (currentTemplate) {
-      templateFields = currentTemplate.fields || []
-      paperWidth = currentTemplate.paperWidth || 40
-      paperHeight = currentTemplate.paperHeight || 30
-    }
-    
-    const fieldsForPrint = templateFields.map(item => ({
-      id: item.id,
-      label: item.label,
-      visible: item.visible,
-      x: item.x,
-      y: item.y,
-      w: item.w,
-      h: item.h,
-      style: item.style,
-      customText: item.customText || '',
-      _designer: (item as any)._designer
-    }))
+    // 获取最新的模板配置（确保使用最新保存的模板）
+    const templateConfig = getPrintTemplateConfig()
     
     console.log(`🖨️ 手动打印弹幕 [ID:${printData.id}] [编号:#${userNo}] ${printData.nickname}: ${printData.content}`)
     
     // 执行打印
-    const result = await window.electronAPI.printBarrage(printData, {
-      fields: JSON.parse(JSON.stringify(fieldsForPrint)),
-      fontSize: printerStore.settings.print_font_size,
-      paperWidth,
-      paperHeight
-    })
+    const result = await window.electronAPI.printBarrage(printData, templateConfig)
     
     // 查找 store 中的弹幕并更新状态
     const barrageInStore = barrageStore.barrages.find(b => b.id === barrage.id)
@@ -454,41 +472,11 @@ const handleStart = async () => {
           
           console.log(`🖨️ 准备打印弹幕 [ID:${printData.id}] [编号:${userNo}] [${printData.type}] ${printData.nickname}: ${printData.content}`)
           
-          // 获取当前选中的模板
-          const currentTemplate = printerStore.currentTemplate
-          
-          // 获取模板设置并打印
-          let templateFields = printerStore.settings.template_fields || []
-          let paperWidth = 40
-          let paperHeight = 30
-          
-          // 如果有当前模板，使用模板的字段和尺寸
-          if (currentTemplate) {
-            templateFields = currentTemplate.fields || []
-            paperWidth = currentTemplate.paperWidth || 40
-            paperHeight = currentTemplate.paperHeight || 30
-          }
-          
-          const fieldsForPrint = templateFields.map(item => ({
-            id: item.id,
-            label: item.label,
-            visible: item.visible,
-            x: item.x,
-            y: item.y,
-            w: item.w,
-            h: item.h,
-            style: item.style,
-            customText: item.customText || '',
-            _designer: (item as any)._designer
-          }))
+          // 获取最新的模板配置（确保使用最新保存的模板）
+          const templateConfig = getPrintTemplateConfig()
           
           try {
-            const result = await window.electronAPI.printBarrage(printData, {
-              fields: JSON.parse(JSON.stringify(fieldsForPrint)),
-              fontSize: printerStore.settings.print_font_size,
-              paperWidth,
-              paperHeight
-            })
+            const result = await window.electronAPI.printBarrage(printData, templateConfig)
             
             if (result.success) {
               // 更新打印状态
@@ -627,6 +615,8 @@ function extractRoomId(url: string): string {
 let unsubscribeMonitoringStopped: (() => void) | null = null
 // 弹幕断开事件的取消订阅函数
 let unsubscribeBarrageDisconnected: (() => void) | null = null
+// 模板更新事件的取消订阅函数（跨窗口同步）
+let unsubscribeTemplateUpdated: (() => void) | null = null
 
 // 组件挂载时检查监控状态
 onMounted(async () => {
@@ -684,6 +674,20 @@ onMounted(async () => {
           duration: 5000
         })
       })
+
+      // 监听模板更新事件（跨窗口同步）
+      // 当在主窗口的设置页面保存模板后，此事件会被广播到直播间窗口
+      unsubscribeTemplateUpdated = window.electronAPI.onTemplateUpdated(async (data) => {
+        console.log(`📢 收到模板更新事件: templateId=${data.templateId}, timestamp=${data.timestamp}`)
+        
+        // 从数据库刷新当前模板
+        await printerStore.refreshCurrentTemplate()
+        
+        // 同时重新加载模板列表（确保 templates 数组也是最新的）
+        await printerStore.loadTemplates()
+        
+        console.log('✅ 模板已同步更新')
+      })
     } catch (error) {
       console.error('获取监控状态失败:', error)
     }
@@ -706,6 +710,12 @@ onUnmounted(() => {
   if (unsubscribeBarrageDisconnected) {
     unsubscribeBarrageDisconnected()
     unsubscribeBarrageDisconnected = null
+  }
+
+  // 取消模板更新事件监听
+  if (unsubscribeTemplateUpdated) {
+    unsubscribeTemplateUpdated()
+    unsubscribeTemplateUpdated = null
   }
 })
 </script>

@@ -155,11 +155,11 @@ app.whenReady().then(async () => {
     await initialize()
     createWindow()
 
-    // 生产环境下，延迟3秒后检查更新（避免影响启动速度）
+    // 生产环境下，延迟3秒后静默检查更新（避免影响启动速度）
     if (isPackaged) {
         setTimeout(() => {
-            console.log('🔄 开始检查应用更新...')
-            autoUpdaterManager.checkForUpdates(true)
+            console.log('🔄 静默检查应用更新...')
+            autoUpdaterManager.checkForUpdatesSilent()
         }, 3000)
     }
 

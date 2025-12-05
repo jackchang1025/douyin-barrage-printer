@@ -1,7 +1,7 @@
 <template>
   <el-config-provider :locale="zhCn">
-    <!-- 全屏更新覆盖层 -->
-    <UpdateOverlay />
+    <!-- 更新通知（右下角卡片式） -->
+    <UpdateNotification />
     
     <router-view v-slot="{ Component }">
       <transition name="fade" mode="out-in">
@@ -15,7 +15,7 @@
 import { onMounted } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useAuthStore } from '@/stores/auth'
-import UpdateOverlay from '@/components/UpdateOverlay.vue'
+import UpdateNotification from '@/components/UpdateNotification.vue'
 
 const authStore = useAuthStore()
 

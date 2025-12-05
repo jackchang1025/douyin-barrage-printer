@@ -1,10 +1,15 @@
 /**
  * 自动更新模块
  * 使用 electron-updater 实现应用自动更新
- * 支持强制更新和进度显示
+ * 
+ * 更新流程：
+ * 1. 应用启动后静默检查更新
+ * 2. 发现新版本时通过 IPC 通知渲染进程
+ * 3. 渲染进程显示现代化的更新通知卡片
+ * 4. 用户在前端 UI 中选择操作
  */
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater'
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
 import log from 'electron-log'
 
@@ -35,15 +40,11 @@ interface UpdateState {
 class AutoUpdaterManager {
   private mainWindow: BrowserWindow | null = null
   private updateState: UpdateState = { status: 'idle' }
-  private forceUpdate: boolean = true // 是否强制更新
-  private isUpdateReady: boolean = false // 更新是否已下载完成
+  private isUpdateReady: boolean = false
 
   constructor() {
-    // 配置 autoUpdater
     this.configureUpdater()
-    // 注册事件监听器
     this.registerEvents()
-    // 注册 IPC 处理器
     this.registerIpcHandlers()
   }
 
@@ -51,20 +52,24 @@ class AutoUpdaterManager {
    * 配置更新器
    */
   private configureUpdater() {
-    // 强制更新模式：自动下载
-    autoUpdater.autoDownload = this.forceUpdate
+    // 不自动下载，等用户确认
+    autoUpdater.autoDownload = false
     // 不允许降级
     autoUpdater.allowDowngrade = false
     // 不允许预发布版本
     autoUpdater.allowPrerelease = false
-    // 自动安装退出时
+    // 退出时自动安装（如果已下载）
     autoUpdater.autoInstallOnAppQuit = true
 
-    // 开发环境下强制检查更新（用于测试）
-    if (!app.isPackaged) {
-      autoUpdater.forceDevUpdateConfig = true
-      autoUpdater.updateConfigPath = path.join(__dirname, '../../dev-app-update.yml')
-    }
+    // 注意：开发环境不配置更新，只有打包后才能检查更新
+    // 打包后会自动使用 app-update.yml
+  }
+
+  /**
+   * 是否可以检查更新（仅打包后的应用支持）
+   */
+  private canCheckUpdate(): boolean {
+    return app.isPackaged
   }
 
   /**
@@ -81,7 +86,7 @@ class AutoUpdaterManager {
       this.sendStatusToWindow()
     })
 
-    // 发现新版本
+    // 发现新版本 - 只发送状态，不弹对话框
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       console.log('📦 发现新版本:', info.version)
       this.updateState = {
@@ -91,12 +96,6 @@ class AutoUpdaterManager {
         newVersion: info.version
       }
       this.sendStatusToWindow()
-
-      // 强制更新模式：自动开始下载（如果 autoDownload 为 false）
-      if (this.forceUpdate && !autoUpdater.autoDownload) {
-        console.log('🚀 强制更新模式：开始自动下载')
-        autoUpdater.downloadUpdate()
-      }
     })
 
     // 已是最新版本
@@ -113,7 +112,7 @@ class AutoUpdaterManager {
     // 下载进度
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
       const percent = Math.round(progress.percent)
-      console.log(`⬇️ 下载进度: ${percent}% (${this.formatBytes(progress.transferred)}/${this.formatBytes(progress.total)})`)
+      console.log(`⬇️ 下载进度: ${percent}%`)
       this.updateState = {
         status: 'downloading',
         progress,
@@ -124,7 +123,7 @@ class AutoUpdaterManager {
       this.sendStatusToWindow()
     })
 
-    // 下载完成
+    // 下载完成 - 只发送状态，不弹对话框
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
       console.log('✅ 更新下载完成:', info.version)
       this.isUpdateReady = true
@@ -135,15 +134,6 @@ class AutoUpdaterManager {
         newVersion: info.version
       }
       this.sendStatusToWindow()
-
-      // 强制更新模式：自动安装
-      if (this.forceUpdate) {
-        console.log('🔄 强制更新模式：3秒后自动安装...')
-        // 给用户3秒时间看到"下载完成"的提示
-        setTimeout(() => {
-          this.installUpdate()
-        }, 3000)
-      }
     })
 
     // 更新错误
@@ -164,6 +154,10 @@ class AutoUpdaterManager {
   private registerIpcHandlers() {
     // 检查更新
     ipcMain.handle('updater:check', async () => {
+      // 开发环境不支持检查更新
+      if (!this.canCheckUpdate()) {
+        return { success: false, error: '开发环境不支持检查更新，请使用打包后的应用' }
+      }
       try {
         const result = await autoUpdater.checkForUpdates()
         return { success: true, updateInfo: result?.updateInfo }
@@ -202,10 +196,10 @@ class AutoUpdaterManager {
       return app.getVersion()
     })
 
-    // 设置强制更新模式
-    ipcMain.handle('updater:setForceUpdate', (_event, force: boolean) => {
-      this.forceUpdate = force
-      autoUpdater.autoDownload = force
+    // 忽略本次更新（重置状态）
+    ipcMain.handle('updater:dismiss', () => {
+      this.updateState = { status: 'idle', currentVersion: app.getVersion() }
+      this.sendStatusToWindow()
       return { success: true }
     })
   }
@@ -226,10 +220,7 @@ class AutoUpdaterManager {
     }
     this.sendStatusToWindow()
 
-    // 使用 setImmediate 确保状态已发送到渲染进程
     setImmediate(() => {
-      // isSilent: false - 显示安装程序
-      // isForceRunAfter: true - 安装后自动启动应用
       autoUpdater.quitAndInstall(false, true)
     })
   }
@@ -251,62 +242,26 @@ class AutoUpdaterManager {
   }
 
   /**
-   * 格式化字节数
+   * 静默检查更新（启动时调用）
    */
-  private formatBytes(bytes: number): string {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-  }
+  async checkForUpdatesSilent() {
+    // 开发环境跳过更新检查
+    if (!this.canCheckUpdate()) {
+      console.log('⚠️ 开发环境，跳过更新检查')
+      return null
+    }
 
-  /**
-   * 检查更新
-   */
-  async checkForUpdates(silent = false) {
     try {
+      console.log('🔍 静默检查更新...')
       const result = await autoUpdater.checkForUpdates()
-      if (silent && result?.updateInfo) {
-        console.log('检查发现更新:', result.updateInfo.version)
+      if (result?.updateInfo) {
+        console.log('📦 发现可用更新:', result.updateInfo.version)
       }
       return result
     } catch (error) {
       console.error('检查更新失败:', error)
       return null
     }
-  }
-
-  /**
-   * 手动检查更新（带对话框反馈）
-   */
-  async checkForUpdatesManual() {
-    try {
-      const result = await autoUpdater.checkForUpdates()
-      if (!result?.updateInfo || result.updateInfo.version === app.getVersion()) {
-        dialog.showMessageBox({
-          type: 'info',
-          title: '检查更新',
-          message: '当前已是最新版本',
-          detail: `版本号: v${app.getVersion()}`
-        })
-      }
-      return result
-    } catch (error: any) {
-      dialog.showMessageBox({
-        type: 'error',
-        title: '检查更新失败',
-        message: '无法检查更新',
-        detail: error.message || '请检查网络连接后重试'
-      })
-      return null
-    }
-  }
-
-  /**
-   * 设置强制更新模式
-   */
-  setForceUpdate(force: boolean) {
-    this.forceUpdate = force
-    autoUpdater.autoDownload = force
   }
 }
 

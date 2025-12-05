@@ -451,6 +451,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    /**
+     * 监听模板更新事件（跨窗口同步）
+     * 当在设置页面保存模板后，此事件会被广播到所有窗口
+     */
+    onTemplateUpdated: (callback: (data: { templateId: string; timestamp: number }) => void) => {
+        const subscription = (_event: any, data: { templateId: string; timestamp: number }) => callback(data)
+        ipcRenderer.on('template:updated', subscription)
+        return () => {
+            ipcRenderer.removeListener('template:updated', subscription)
+        }
+    },
+
     // ==================== 机器码相关 ====================
 
     /**
@@ -522,6 +534,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * 获取当前应用版本
      */
     getAppVersion: () => ipcRenderer.invoke('updater:getVersion'),
+
+    /**
+     * 忽略本次更新提示
+     */
+    dismissUpdate: () => ipcRenderer.invoke('updater:dismiss'),
 
     /**
      * 监听更新状态变化

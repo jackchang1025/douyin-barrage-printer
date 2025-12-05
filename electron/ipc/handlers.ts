@@ -162,9 +162,23 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
 
     /**
      * 保存打印模板（新增或更新）
+     * 保存成功后会向所有窗口广播模板更新事件
      */
     ipcMain.handle('template:save', (_event, template: any) => {
-        return sqliteManager.saveTemplate(template)
+        const result = sqliteManager.saveTemplate(template)
+
+        // 保存成功后，向所有窗口广播模板更新事件
+        if (result.success) {
+            console.log('📢 广播模板更新事件到所有窗口')
+            BrowserWindow.getAllWindows().forEach(window => {
+                window.webContents.send('template:updated', {
+                    templateId: template.id,
+                    timestamp: Date.now()
+                })
+            })
+        }
+
+        return result
     })
 
     /**

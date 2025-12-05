@@ -35,6 +35,9 @@ export const usePrinterStore = defineStore('printer', () => {
     const currentTemplateId = ref<string | null>(null)
     const isLoadingTemplates = ref(false)
 
+    // 模板版本号：每次模板保存后递增，用于通知其他组件刷新
+    const templateVersion = ref(0)
+
     // 当前选中的模板
     const currentTemplate = computed(() => {
         if (!currentTemplateId.value) return null
@@ -585,7 +588,7 @@ export const usePrinterStore = defineStore('printer', () => {
     const shouldPrintBarrage = (barrage: BarragePrintData & { user_level?: number; gift_value?: number; has_badge?: boolean }): boolean => {
         const content = barrage.content || ''
         const barrageInfo = `[${barrage.type}] ${barrage.nickname || '未知用户'}: ${content}`
-        
+
         // 调试：打印当前过滤设置
         console.log(`🔧 当前过滤设置: mode=${settings.value.filter_mode}, keywords=[${settings.value.filter_keywords.join(',')}], range=${settings.value.filter_number_min}-${settings.value.filter_number_max}`)
 
@@ -612,7 +615,7 @@ export const usePrinterStore = defineStore('printer', () => {
         const contentHasNumber = hasNumber(content)
         const numbers = extractNumbers(content)
         const contentIsPureNumber = isPureNumber(content)
-        
+
         // 调试：打印内容分析结果
         console.log(`🔍 内容分析: "${content}" -> 纯数字=${contentIsPureNumber}, 含数字=${contentHasNumber}, 数字=${numbers.join(',')}, 含关键词=${contentHasKeyword}`)
 
@@ -782,14 +785,52 @@ export const usePrinterStore = defineStore('printer', () => {
     }
 
     /**
+     * 刷新当前模板数据（从数据库重新获取最新版本）
+     * 用于确保打印时使用最新的模板配置
+     */
+    const refreshCurrentTemplate = async (): Promise<PrintTemplate | null> => {
+        if (!currentTemplateId.value) {
+            console.log('⚠️ 没有选中的模板，无需刷新')
+            return null
+        }
+
+        try {
+            // 直接从数据库获取最新的模板数据
+            const latestTemplate = await window.electronAPI.getTemplate(currentTemplateId.value)
+
+            if (latestTemplate) {
+                // 更新 templates 数组中对应的模板
+                const index = templates.value.findIndex(t => t.id === currentTemplateId.value)
+                if (index !== -1) {
+                    templates.value[index] = latestTemplate
+                } else {
+                    templates.value.push(latestTemplate)
+                }
+                console.log(`🔄 已刷新当前模板: ${latestTemplate.name}`)
+                return latestTemplate
+            }
+
+            return null
+        } catch (error) {
+            console.error('刷新当前模板失败:', error)
+            return null
+        }
+    }
+
+    /**
      * 保存模板（新增或更新）
      */
     const saveTemplate = async (template: PrintTemplate): Promise<{ success: boolean; message?: string }> => {
         try {
-            const result = await window.electronAPI.saveTemplate(template)
+            // 将响应式对象转换为普通对象，避免 IPC 克隆错误
+            const plainTemplate = JSON.parse(JSON.stringify(template))
+            const result = await window.electronAPI.saveTemplate(plainTemplate)
             if (result.success) {
                 // 重新加载模板列表
                 await loadTemplates()
+                // 递增模板版本号，通知其他组件（如 LiveRoom）刷新模板
+                templateVersion.value++
+                console.log(`📝 模板已保存，版本号更新: ${templateVersion.value}`)
                 ElMessage.success('模板保存成功')
             } else {
                 ElMessage.error(result.message || '保存模板失败')
@@ -932,6 +973,7 @@ export const usePrinterStore = defineStore('printer', () => {
         currentTemplate,
         defaultTemplate,
         isLoadingTemplates,
+        templateVersion,
 
         // 方法
         loadPrinters,
@@ -964,6 +1006,7 @@ export const usePrinterStore = defineStore('printer', () => {
         switchTemplate,
         duplicateTemplate,
         createTemplate,
+        refreshCurrentTemplate,
     }
 })
 

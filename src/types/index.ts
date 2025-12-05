@@ -73,6 +73,7 @@ export interface ElectronAPI {
   onLoginStatusChanged: (callback: (status: any) => void) => () => void
   onMonitoringStopped: (callback: () => void) => () => void
   onBarrageDisconnected: (callback: () => void) => () => void
+  onTemplateUpdated: (callback: (data: { templateId: string; timestamp: number }) => void) => () => void
 
   // 心跳
   startHeartbeat: () => Promise<any>
@@ -83,6 +84,15 @@ export interface ElectronAPI {
   closeLiveRoomWindow: () => Promise<{ success: boolean; message: string }>
   getLiveRoomWindowStatus: () => Promise<{ isOpen: boolean; isMonitoring: boolean }>
   onLiveRoomWindowClosed: (callback: () => void) => () => void
+
+  // 自动更新
+  checkForUpdates: () => Promise<{ success: boolean; updateInfo?: UpdateInfo; error?: string }>
+  downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+  installUpdate: () => Promise<{ success: boolean }>
+  getUpdateStatus: () => Promise<UpdateState>
+  getAppVersion: () => Promise<string>
+  dismissUpdate: () => Promise<{ success: boolean }>
+  onUpdateStatus: (callback: (status: UpdateState) => void) => () => void
 }
 
 // 弹幕
@@ -389,6 +399,35 @@ export interface Subscription {
     custom_template: boolean
     api_access: boolean
   }
+}
+
+// 更新信息
+export interface UpdateInfo {
+  version: string
+  releaseDate?: string
+  releaseNotes?: string
+}
+
+// 更新进度
+export interface UpdateProgress {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
+}
+
+// 更新状态
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+
+// 更新状态对象
+export interface UpdateState {
+  status: UpdateStatus
+  info?: UpdateInfo
+  progress?: UpdateProgress
+  error?: string
+  currentVersion?: string
+  newVersion?: string
+  isUpdateReady?: boolean
 }
 
 // 全局声明

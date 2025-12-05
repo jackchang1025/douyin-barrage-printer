@@ -1,6 +1,6 @@
 {
   "name": "douyin-barrage-printer",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "抖音弹幕打印 SaaS 系统客户端",
   "author": "jackchang1025",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "dev:mock": "concurrently -k -n mock,vite -c blue,green \"npm run mock\" \"vite\"",
     "mock": "node mock/server.js",
     "build": "vite build",
-    "build:dev": "cross-env VITE_DEV_MODE=true vite build",
+    "build:dev": "cross-env VITE_DEV_MODE=true vite build --mode development",
     "build:check": "vue-tsc && vite build",
     "preview": "vite preview",
     "electron:dev": "chcp 65001 >nul 2>&1 & concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
@@ -30,6 +30,8 @@
     "postinstall": "electron-builder install-app-deps",
     "pack:win": "npm run rebuild && npm run build && electron-builder --win --publish never",
     "pack:win:dev": "npm run rebuild && npm run build:dev && electron-builder --win --publish never",
+    "release:win": "npm run rebuild && npm run build && dotenv -e .env.local -- electron-builder --win --publish always",
+    "release:win:dev": "npm run rebuild && npm run build:dev && dotenv -e .env.local -- electron-builder --win --publish always",
     "lint": "eslint . --ext .vue,.js,.jsx,.ts,.tsx --fix",
     "type-check": "vue-tsc --noEmit",
     "test": "vitest",
@@ -73,6 +75,7 @@
     "@vitest/ui": "^4.0.14",
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
+    "dotenv-cli": "^11.0.0",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
     "electron-icon-builder": "^2.0.1",
@@ -144,8 +147,7 @@
       "uninstallerIcon": "build/icon.ico",
       "language": "2052",
       "runAfterFinish": true,
-      "deleteAppDataOnUninstall": true,
-      "include": "build/installer.nsh"
+      "deleteAppDataOnUninstall": true
     },
     "publish": [
       {

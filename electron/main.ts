@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell, Menu } from 'electron'
+import { app, BrowserWindow, dialog, shell, Menu, session } from 'electron'
 import path from 'path'
 import { SQLiteManager } from './database/sqlite'
 import { setupIpcHandlers } from './ipc/handlers'
@@ -23,6 +23,30 @@ declare const __DEV_MODE__: boolean
 
 // 开发测试模式：通过 npm run pack:win:dev 打包时会设为 true
 const DEV_MODE = typeof __DEV_MODE__ !== 'undefined' ? __DEV_MODE__ : false
+
+/**
+ * 设置内容安全策略（CSP）
+ * 消除 Electron Security Warning (Insecure Content-Security-Policy) 警告
+ */
+function setupContentSecurityPolicy() {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        // 开发测试模式（DEV_MODE=true）或未打包时，使用宽松的 CSP
+        const useRelaxedCSP = DEV_MODE || !isPackaged
+
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [
+                    useRelaxedCSP
+                        // 开发/测试环境：允许 HTTP 连接（mock server）
+                        ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' ws: wss: http: https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http: https: ws: wss:;"
+                        // 生产环境：严格的 CSP
+                        : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:;"
+                ]
+            }
+        })
+    })
+}
 
 /**
  * 创建主窗口
@@ -125,6 +149,9 @@ async function initialize() {
  * 应用准备就绪
  */
 app.whenReady().then(async () => {
+    // 设置内容安全策略（在创建窗口之前）
+    setupContentSecurityPolicy()
+
     await initialize()
     createWindow()
 

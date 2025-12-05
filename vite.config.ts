@@ -4,6 +4,9 @@ import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import { resolve } from 'path'
 
+// 从环境变量获取开发模式标识
+const isDevMode = process.env.VITE_DEV_MODE === 'true'
+
 // https://vitejs.dev/config/
 export default defineConfig({
     plugins: [
@@ -17,6 +20,10 @@ export default defineConfig({
                     // 这样可以确保 Electron 在正确的时机启动
                 },
                 vite: {
+                    // 注入 __DEV_MODE__ 到主进程
+                    define: {
+                        __DEV_MODE__: JSON.stringify(isDevMode),
+                    },
                     build: {
                         outDir: 'dist-electron',
                         rollupOptions: {

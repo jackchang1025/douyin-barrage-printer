@@ -1,62 +1,64 @@
 <template>
-  <div v-if="showUpdateBar" class="update-bar" :class="updateBarClass">
-    <!-- 检查中 -->
-    <template v-if="updateStatus === 'checking'">
-      <el-icon class="spin"><Loading /></el-icon>
-      <span>正在检查更新...</span>
-    </template>
+  <!-- 使用单根元素包裹，手动绑定 $attrs 以支持外部传入的 class -->
+  <div v-bind="$attrs">
+    <div v-if="showUpdateBar" class="update-bar" :class="updateBarClass">
+      <!-- 检查中 -->
+      <template v-if="updateStatus === 'checking'">
+        <el-icon class="spin"><Loading /></el-icon>
+        <span>正在检查更新...</span>
+      </template>
 
-    <!-- 发现新版本 -->
-    <template v-else-if="updateStatus === 'available'">
-      <el-icon><InfoFilled /></el-icon>
-      <span>发现新版本 v{{ updateInfo?.version }}</span>
-      <el-button size="small" type="primary" @click="downloadUpdate" :loading="isDownloading">
-        立即更新
-      </el-button>
-      <el-button size="small" text @click="dismiss">
-        稍后提醒
-      </el-button>
-    </template>
+      <!-- 发现新版本 -->
+      <template v-else-if="updateStatus === 'available'">
+        <el-icon><InfoFilled /></el-icon>
+        <span>发现新版本 v{{ updateInfo?.version }}</span>
+        <el-button size="small" type="primary" @click="downloadUpdate" :loading="isDownloading">
+          立即更新
+        </el-button>
+        <el-button size="small" text @click="dismiss">
+          稍后提醒
+        </el-button>
+      </template>
 
-    <!-- 下载中 -->
-    <template v-else-if="updateStatus === 'downloading'">
-      <el-icon class="spin"><Loading /></el-icon>
-      <span>正在下载更新...</span>
-      <el-progress 
-        :percentage="downloadPercent" 
-        :stroke-width="6" 
-        style="width: 200px; margin: 0 12px"
-      />
-      <span class="download-speed">{{ downloadSpeed }}</span>
-    </template>
+      <!-- 下载中 -->
+      <template v-else-if="updateStatus === 'downloading'">
+        <el-icon class="spin"><Loading /></el-icon>
+        <span>正在下载更新...</span>
+        <el-progress 
+          :percentage="downloadPercent" 
+          :stroke-width="6" 
+          style="width: 200px; margin: 0 12px"
+        />
+        <span class="download-speed">{{ downloadSpeed }}</span>
+      </template>
 
-    <!-- 下载完成 -->
-    <template v-else-if="updateStatus === 'downloaded'">
-      <el-icon><SuccessFilled /></el-icon>
-      <span>新版本 v{{ updateInfo?.version }} 已下载完成</span>
-      <el-button size="small" type="success" @click="installUpdate">
-        立即安装
-      </el-button>
-      <el-button size="small" text @click="dismiss">
-        稍后安装
-      </el-button>
-    </template>
+      <!-- 下载完成 -->
+      <template v-else-if="updateStatus === 'downloaded'">
+        <el-icon><SuccessFilled /></el-icon>
+        <span>新版本 v{{ updateInfo?.version }} 已下载完成</span>
+        <el-button size="small" type="success" @click="installUpdate">
+          立即安装
+        </el-button>
+        <el-button size="small" text @click="dismiss">
+          稍后安装
+        </el-button>
+      </template>
 
-    <!-- 错误 -->
-    <template v-else-if="updateStatus === 'error'">
-      <el-icon><WarningFilled /></el-icon>
-      <span>更新检查失败: {{ errorMessage }}</span>
-      <el-button size="small" @click="checkForUpdates">
-        重试
-      </el-button>
-      <el-button size="small" text @click="dismiss">
-        关闭
-      </el-button>
-    </template>
-  </div>
+      <!-- 错误 -->
+      <template v-else-if="updateStatus === 'error'">
+        <el-icon><WarningFilled /></el-icon>
+        <span>更新检查失败: {{ errorMessage }}</span>
+        <el-button size="small" @click="checkForUpdates">
+          重试
+        </el-button>
+        <el-button size="small" text @click="dismiss">
+          关闭
+        </el-button>
+      </template>
+    </div>
 
-  <!-- 设置页面的版本信息和检查更新按钮 -->
-  <div v-if="showVersionInfo" class="version-info">
+    <!-- 设置页面的版本信息和检查更新按钮 -->
+    <div v-if="showVersionInfo" class="version-info">
     <div class="version-row">
       <span class="version-label">当前版本</span>
       <span class="version-value">v{{ currentVersion }}</span>
@@ -72,10 +74,16 @@
     <div v-if="updateStatus === 'not-available'" class="update-hint success">
       ✓ 当前已是最新版本
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+// 禁用自动 attrs 继承，手动绑定到根元素
+defineOptions({
+  inheritAttrs: false
+})
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 

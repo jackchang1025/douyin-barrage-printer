@@ -13,6 +13,12 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: false },
     },
     {
+        path: '/register',
+        name: 'Register',
+        component: () => import('@/views/Register.vue'),
+        meta: { requiresAuth: false },
+    },
+    {
         path: '/dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard.vue'),
@@ -56,7 +62,7 @@ router.beforeEach((to, _from, next) => {
     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
         // 需要认证但未登录，跳转到登录页
         next({ name: 'Login' })
-    } else if (to.name === 'Login' && authStore.isAuthenticated) {
+    } else if ((to.name === 'Login' || to.name === 'Register') && authStore.isAuthenticated) {
         // 已登录但访问登录页，跳转到首页
         next({ name: 'Dashboard' })
     } else {
@@ -65,4 +71,3 @@ router.beforeEach((to, _from, next) => {
 })
 
 export default router
-

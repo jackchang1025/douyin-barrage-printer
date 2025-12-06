@@ -55,6 +55,9 @@ export const API_ENDPOINTS = {
         REGISTER: '/auth/register',
         LOGOUT: '/auth/logout',
         ME: '/auth/me',
+        SEND_CODE: '/auth/send-code',
+        LOGIN_PHONE: '/auth/login-phone',
+        LOGIN_CODE: '/auth/login-code',
     },
     // 订阅相关
     SUBSCRIPTION: {

@@ -116,10 +116,66 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    const loginWithPhone = async (countryCode: string, phone: string, password: string) => {
+        loading.value = true
+        try {
+            const response = await axios.post(buildApiUrl(API_ENDPOINTS.AUTH.LOGIN_PHONE), {
+                countryCode,
+                phone,
+                password,
+            })
+            token.value = response.data.token
+            user.value = response.data.user
+            localStorage.setItem('auth_token', response.data.token)
+            localStorage.setItem('user_info', JSON.stringify(response.data.user))
+            if (window.electronAPI) {
+                await window.electronAPI.startHeartbeat()
+            }
+            ElMessage.success('登录成功')
+            return { success: true }
+        } catch (error: any) {
+            console.error('手机号登录失败:', error)
+            return {
+                success: false,
+                message: error.response?.data?.message || '登录失败，请检查账号密码',
+            }
+        } finally {
+            loading.value = false
+        }
+    }
+
+    const loginWithCode = async (countryCode: string, phone: string, code: string) => {
+        loading.value = true
+        try {
+            const response = await axios.post(buildApiUrl(API_ENDPOINTS.AUTH.LOGIN_CODE), {
+                countryCode,
+                phone,
+                code,
+            })
+            token.value = response.data.token
+            user.value = response.data.user
+            localStorage.setItem('auth_token', response.data.token)
+            localStorage.setItem('user_info', JSON.stringify(response.data.user))
+            if (window.electronAPI) {
+                await window.electronAPI.startHeartbeat()
+            }
+            ElMessage.success('登录成功')
+            return { success: true }
+        } catch (error: any) {
+            console.error('验证码登录失败:', error)
+            return {
+                success: false,
+                message: error.response?.data?.message || '登录失败，请检查验证码',
+            }
+        } finally {
+            loading.value = false
+        }
+    }
+
     /**
      * 注册
      */
-    const register = async (data: { name: string; email: string; password: string }) => {
+    const register = async (data: { countryCode: string; phone: string; password: string; code: string }) => {
         loading.value = true
 
         try {
@@ -132,6 +188,29 @@ export const useAuthStore = defineStore('auth', () => {
             return {
                 success: false,
                 message: error.response?.data?.message || '注册失败',
+            }
+        } finally {
+            loading.value = false
+        }
+    }
+
+    /**
+     * 发送手机验证码
+     */
+    const sendVerificationCode = async (countryCode: string, phone: string) => {
+        loading.value = true
+        try {
+            const response = await axios.post(buildApiUrl(API_ENDPOINTS.AUTH.SEND_CODE), {
+                countryCode,
+                phone,
+            })
+            ElMessage.success('验证码已发送')
+            return { success: true, code: response.data.code }
+        } catch (error: any) {
+            console.error('发送验证码失败:', error)
+            return {
+                success: false,
+                message: error.response?.data?.message || '发送验证码失败',
             }
         } finally {
             loading.value = false
@@ -249,9 +328,12 @@ export const useAuthStore = defineStore('auth', () => {
 
         // 方法
         login,
+        loginWithPhone,
+        loginWithCode,
         register,
         logout,
         restoreSession,
         checkSubscription,
+        sendVerificationCode,
     }
 })

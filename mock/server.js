@@ -19,6 +19,9 @@ const users = new Map()
 // 模拟 Token 存储
 const tokens = new Map()
 
+// 模拟验证码存储
+const verificationCodes = new Map()
+
 /**
  * 生成随机 Token
  */
@@ -102,7 +105,7 @@ function getOrCreateUser(token) {
  * API 路由处理
  */
 const routes = {
-    // 用户登录
+    // 用户登录（邮箱密码）
     'POST /api/auth/login': async (req, res, body) => {
         const { email, password } = body
 
@@ -128,22 +131,85 @@ const routes = {
         sendJson(res, { token, user })
     },
 
-    // 用户注册
-    'POST /api/auth/register': async (req, res, body) => {
-        const { name, email, password } = body
+    // 手机号+密码登录（开发环境任意手机号密码均可）
+    'POST /api/auth/login-phone': async (_req, res, body) => {
+        const { countryCode, phone, password } = body
+        if (!countryCode || !phone || !password) {
+            return sendJson(res, { message: '请填写完整信息' }, 400)
+        }
+        const token = generateToken()
+        const key = `${countryCode}:${phone}`
+        const user = {
+            id: Date.now(),
+            name: key,
+            email: `${key}@mock.local`,
+            plan: 'pro',
+            subscription_expiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        }
+        tokens.set(token, user)
+        console.log(`✅ 手机号登录: ${key}`)
+        sendJson(res, { token, user })
+    },
 
-        if (!name || !email || !password) {
+    // 手机号+验证码登录
+    'POST /api/auth/login-code': async (_req, res, body) => {
+        const { countryCode, phone, code } = body
+        if (!countryCode || !phone || !code) {
+            return sendJson(res, { message: '请填写完整信息' }, 400)
+        }
+        const key = `${countryCode}:${phone}`
+        const stored = verificationCodes.get(key)
+        if (!stored || stored !== code) {
+            return sendJson(res, { message: '验证码不正确' }, 400)
+        }
+        const token = generateToken()
+        const user = {
+            id: Date.now(),
+            name: key,
+            email: `${key}@mock.local`,
+            plan: 'pro',
+            subscription_expiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        }
+        tokens.set(token, user)
+        console.log(`✅ 验证码登录: ${key}`)
+        sendJson(res, { token, user })
+    },
+
+    // 发送手机验证码
+    'POST /api/auth/send-code': async (_req, res, body) => {
+        const { countryCode, phone } = body
+        if (!countryCode || !phone) {
+            return sendJson(res, { message: '请输入国家/地区和手机号码' }, 400)
+        }
+        const key = `${countryCode}:${phone}`
+        const code = Math.floor(100000 + Math.random() * 900000).toString()
+        verificationCodes.set(key, code)
+        console.log(`📨 发送验证码: ${key} -> ${code}`)
+        sendJson(res, { message: '验证码已发送', code })
+    },
+
+    // 用户注册（手机）
+    'POST /api/auth/register': async (_req, res, body) => {
+        const { countryCode, phone, password, code } = body
+
+        if (!countryCode || !phone || !password || !code) {
             return sendJson(res, { message: '请填写完整信息' }, 400)
         }
 
-        if (users.has(email)) {
-            return sendJson(res, { message: '邮箱已被注册' }, 400)
+        const key = `${countryCode}:${phone}`
+        const stored = verificationCodes.get(key)
+        if (!stored || stored !== code) {
+            return sendJson(res, { message: '验证码不正确' }, 400)
         }
 
-        // 存储用户
-        users.set(email, { name, email, password })
+        if (users.has(key)) {
+            return sendJson(res, { message: '该手机号码已注册' }, 400)
+        }
 
-        console.log(`✅ 用户注册: ${email}`)
+        users.set(key, { countryCode, phone, password })
+        verificationCodes.delete(key)
+
+        console.log(`✅ 用户注册: ${key}`)
         sendJson(res, { message: '注册成功' })
     },
 
@@ -240,7 +306,10 @@ server.listen(PORT, () => {
     console.log('')
     console.log('📝 可用接口:')
     console.log('   POST /api/auth/login     - 用户登录')
+    console.log('   POST /api/auth/login-phone - 手机号+密码登录')
+    console.log('   POST /api/auth/login-code  - 手机号+验证码登录')
     console.log('   POST /api/auth/register  - 用户注册')
+    console.log('   POST /api/auth/send-code - 发送验证码')
     console.log('   POST /api/auth/logout    - 退出登录')
     console.log('   GET  /api/auth/me        - 获取用户信息')
     console.log('   GET  /api/subscription/check - 检查订阅')

@@ -463,6 +463,107 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    // ==================== 自动回复相关 ====================
+
+    /**
+     * 获取所有自动回复规则
+     */
+    getAutoReplyRules: () =>
+        ipcRenderer.invoke('autoReply:getRules'),
+
+    /**
+     * 获取单个自动回复规则
+     */
+    getAutoReplyRule: (id: string) =>
+        ipcRenderer.invoke('autoReply:getRule', id),
+
+    /**
+     * 保存自动回复规则
+     */
+    saveAutoReplyRule: (rule: any) =>
+        ipcRenderer.invoke('autoReply:saveRule', rule),
+
+    /**
+     * 删除自动回复规则
+     */
+    deleteAutoReplyRule: (id: string) =>
+        ipcRenderer.invoke('autoReply:deleteRule', id),
+
+    /**
+     * 批量保存自动回复规则
+     */
+    saveAutoReplyRules: (rules: any[]) =>
+        ipcRenderer.invoke('autoReply:saveRules', rules),
+
+    /**
+     * 启用/禁用自动回复
+     */
+    setAutoReplyEnabled: (enabled: boolean) =>
+        ipcRenderer.invoke('autoReply:setEnabled', enabled),
+
+    /**
+     * 获取自动回复状态
+     */
+    getAutoReplyStatus: () =>
+        ipcRenderer.invoke('autoReply:getStatus'),
+
+    /**
+     * 手动发送自动回复消息（用于测试）
+     */
+    sendAutoReplyMessage: (content: string) =>
+        ipcRenderer.invoke('autoReply:sendMessage', content),
+
+    /**
+     * 获取自动回复发送日志
+     */
+    getAutoReplyLogs: (options?: { ruleId?: string; limit?: number; offset?: number }) =>
+        ipcRenderer.invoke('autoReply:getLogs', options),
+
+    /**
+     * 清理自动回复日志
+     */
+    cleanAutoReplyLogs: (keepCount?: number) =>
+        ipcRenderer.invoke('autoReply:cleanLogs', keepCount),
+
+    /**
+     * 设置自动回复发送间隔
+     */
+    setAutoReplyInterval: (ms: number) =>
+        ipcRenderer.invoke('autoReply:setInterval', ms),
+
+    /**
+     * 监听自动回复发送事件
+     */
+    onAutoReplySent: (callback: (data: {
+        ruleName: string
+        triggerNickname: string
+        content: string
+        success: boolean
+        error?: string
+        timestamp: number
+    }) => void) => {
+        const subscription = (_event: any, data: any) => callback(data)
+        ipcRenderer.on('autoReply:sent', subscription)
+        return () => {
+            ipcRenderer.removeListener('autoReply:sent', subscription)
+        }
+    },
+
+    /**
+     * 监听自动回复状态变化事件
+     */
+    onAutoReplyStatusChanged: (callback: (data: {
+        enabled: boolean
+        rulesCount: number
+        timestamp: number
+    }) => void) => {
+        const subscription = (_event: any, data: any) => callback(data)
+        ipcRenderer.on('autoReply:statusChanged', subscription)
+        return () => {
+            ipcRenderer.removeListener('autoReply:statusChanged', subscription)
+        }
+    },
+
     // ==================== 机器码相关 ====================
 
     /**

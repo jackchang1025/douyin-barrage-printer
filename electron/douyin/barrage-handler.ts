@@ -6,6 +6,7 @@
 import { ipcMain } from 'electron'
 import { protobufParserDycast } from './protobuf-parser-dycast'
 import type { User } from './dycast-model'
+import { autoReplyManager } from './auto-reply-manager'
 
 /**
  * 弹幕数据接口
@@ -52,6 +53,11 @@ export class BarrageHandler {
           const barrageData = this.convertToBarrageData(msg)
           if (barrageData) {
             ipcMain.emit('live-barrage:data', null, barrageData)
+
+            // 触发自动回复检查
+            autoReplyManager.processBarrage(barrageData).catch(err => {
+              console.error('❌ 自动回复处理失败:', err)
+            })
           }
         }
       }
@@ -97,6 +103,11 @@ export class BarrageHandler {
         if (barrage) {
           this.logBarrage(barrage)
           ipcMain.emit('live-barrage:data', null, barrage)
+
+          // 触发自动回复检查
+          autoReplyManager.processBarrage(barrage).catch(err => {
+            console.error('❌ 自动回复处理失败:', err)
+          })
         }
       })
     } else {
@@ -104,6 +115,11 @@ export class BarrageHandler {
       if (barrage) {
         this.logBarrage(barrage)
         ipcMain.emit('live-barrage:data', null, barrage)
+
+        // 触发自动回复检查
+        autoReplyManager.processBarrage(barrage).catch(err => {
+          console.error('❌ 自动回复处理失败:', err)
+        })
       }
     }
   }

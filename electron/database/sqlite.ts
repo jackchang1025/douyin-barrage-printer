@@ -158,6 +158,50 @@ export class SQLiteManager {
       CREATE INDEX IF NOT EXISTS idx_print_templates_updated_at ON print_templates(updated_at DESC);
     `)
 
+    // 6. 自动回复规则表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS auto_reply_rules (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          enabled INTEGER DEFAULT 1,
+          priority INTEGER DEFAULT 0,
+          trigger_type TEXT NOT NULL,
+          trigger_value TEXT NOT NULL,
+          response_type TEXT NOT NULL,
+          response_content TEXT NOT NULL,
+          cooldown INTEGER DEFAULT 0,
+          global_cooldown INTEGER DEFAULT 0,
+          user_level INTEGER,
+          has_badge INTEGER,
+          only_first_time INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_auto_reply_rules_enabled ON auto_reply_rules(enabled);
+      CREATE INDEX IF NOT EXISTS idx_auto_reply_rules_priority ON auto_reply_rules(priority);
+    `)
+
+    // 7. 自动回复发送日志表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS auto_reply_logs (
+          id TEXT PRIMARY KEY,
+          rule_id TEXT NOT NULL,
+          rule_name TEXT NOT NULL,
+          trigger_user_id TEXT,
+          trigger_nickname TEXT,
+          trigger_content TEXT,
+          reply_content TEXT NOT NULL,
+          success INTEGER DEFAULT 0,
+          error TEXT,
+          created_at INTEGER NOT NULL,
+          FOREIGN KEY (rule_id) REFERENCES auto_reply_rules(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_rule_id ON auto_reply_logs(rule_id);
+      CREATE INDEX IF NOT EXISTS idx_auto_reply_logs_created_at ON auto_reply_logs(created_at DESC);
+    `)
+
     console.log('✅ 数据库表结构校验完成')
   }
 
@@ -1213,6 +1257,389 @@ export class SQLiteManager {
     } catch (error: any) {
       console.error('❌ 设置默认模板失败:', error)
       return { success: false, message: error.message }
+    }
+  }
+
+  // ================= 辅助方法 =================
+
+  /**
+   * 安全解析 JSON，解析失败时返回默认值
+   * @param jsonString 要解析的 JSON 字符串
+   * @param defaultValue 解析失败时的默认值
+   */
+  private safeParseJSON<T>(jsonString: string, defaultValue: T): T {
+    try {
+      return JSON.parse(jsonString)
+    } catch (error) {
+      console.warn('⚠️ JSON 解析失败，使用默认值:', error)
+      return defaultValue
+    }
+  }
+
+  // ================= 自动回复规则管理 =================
+
+  /**
+   * 获取所有自动回复规则
+   */
+  getAutoReplyRules(): any[] {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT * FROM auto_reply_rules 
+        ORDER BY priority ASC, created_at ASC
+      `)
+      const rows = stmt.all() as any[]
+
+      return rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled === 1,
+        priority: row.priority,
+        trigger: {
+          type: row.trigger_type,
+          value: row.trigger_value
+        },
+        response: {
+          type: row.response_type,
+          content: row.response_type === 'random'
+            ? this.safeParseJSON(row.response_content, [row.response_content])
+            : row.response_content
+        },
+        conditions: {
+          cooldown: row.cooldown || undefined,
+          globalCooldown: row.global_cooldown || undefined,
+          userLevel: row.user_level !== null ? row.user_level : undefined,
+          hasBadge: row.has_badge !== null ? row.has_badge === 1 : undefined,
+          onlyFirstTime: row.only_first_time === 1
+        },
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }))
+    } catch (error) {
+      console.error('❌ 获取自动回复规则失败:', error)
+      return []
+    }
+  }
+
+  /**
+   * 获取单个自动回复规则
+   */
+  getAutoReplyRule(id: string): any | null {
+    try {
+      const stmt = this.db.prepare('SELECT * FROM auto_reply_rules WHERE id = ?')
+      const row = stmt.get(id) as any
+
+      if (!row) return null
+
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled === 1,
+        priority: row.priority,
+        trigger: {
+          type: row.trigger_type,
+          value: row.trigger_value
+        },
+        response: {
+          type: row.response_type,
+          content: row.response_type === 'random'
+            ? this.safeParseJSON(row.response_content, [row.response_content])
+            : row.response_content
+        },
+        conditions: {
+          cooldown: row.cooldown || undefined,
+          globalCooldown: row.global_cooldown || undefined,
+          userLevel: row.user_level !== null ? row.user_level : undefined,
+          hasBadge: row.has_badge !== null ? row.has_badge === 1 : undefined,
+          onlyFirstTime: row.only_first_time === 1
+        },
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }
+    } catch (error) {
+      console.error('❌ 获取自动回复规则失败:', error)
+      return null
+    }
+  }
+
+  /**
+   * 保存自动回复规则（新增或更新）
+   */
+  saveAutoReplyRule(rule: any): { success: boolean; id?: string; message?: string } {
+    const now = Date.now()
+
+    try {
+      // 处理回复内容（random 类型需要 JSON 序列化）
+      const responseContent = rule.response.type === 'random'
+        ? JSON.stringify(rule.response.content)
+        : rule.response.content
+
+      // 检查是否存在
+      const existStmt = this.db.prepare('SELECT id FROM auto_reply_rules WHERE id = ?')
+      const exists = existStmt.get(rule.id)
+
+      if (exists) {
+        // 更新
+        const updateStmt = this.db.prepare(`
+          UPDATE auto_reply_rules SET
+            name = ?,
+            enabled = ?,
+            priority = ?,
+            trigger_type = ?,
+            trigger_value = ?,
+            response_type = ?,
+            response_content = ?,
+            cooldown = ?,
+            global_cooldown = ?,
+            user_level = ?,
+            has_badge = ?,
+            only_first_time = ?,
+            updated_at = ?
+          WHERE id = ?
+        `)
+        updateStmt.run(
+          rule.name,
+          rule.enabled ? 1 : 0,
+          rule.priority || 0,
+          rule.trigger.type,
+          rule.trigger.value,
+          rule.response.type,
+          responseContent,
+          rule.conditions?.cooldown || 0,
+          rule.conditions?.globalCooldown || 0,
+          rule.conditions?.userLevel ?? null,
+          rule.conditions?.hasBadge !== undefined ? (rule.conditions.hasBadge ? 1 : 0) : null,
+          rule.conditions?.onlyFirstTime ? 1 : 0,
+          now,
+          rule.id
+        )
+        console.log(`✅ 更新自动回复规则: ${rule.name}`)
+      } else {
+        // 新增
+        const insertStmt = this.db.prepare(`
+          INSERT INTO auto_reply_rules (
+            id, name, enabled, priority,
+            trigger_type, trigger_value,
+            response_type, response_content,
+            cooldown, global_cooldown, user_level, has_badge, only_first_time,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        insertStmt.run(
+          rule.id,
+          rule.name,
+          rule.enabled ? 1 : 0,
+          rule.priority || 0,
+          rule.trigger.type,
+          rule.trigger.value,
+          rule.response.type,
+          responseContent,
+          rule.conditions?.cooldown || 0,
+          rule.conditions?.globalCooldown || 0,
+          rule.conditions?.userLevel ?? null,
+          rule.conditions?.hasBadge !== undefined ? (rule.conditions.hasBadge ? 1 : 0) : null,
+          rule.conditions?.onlyFirstTime ? 1 : 0,
+          now,
+          now
+        )
+        console.log(`✅ 新增自动回复规则: ${rule.name}`)
+      }
+
+      return { success: true, id: rule.id }
+    } catch (error: any) {
+      console.error('❌ 保存自动回复规则失败:', error)
+      return { success: false, message: error.message }
+    }
+  }
+
+  /**
+   * 删除自动回复规则
+   */
+  deleteAutoReplyRule(id: string): { success: boolean; message?: string } {
+    try {
+      const stmt = this.db.prepare('DELETE FROM auto_reply_rules WHERE id = ?')
+      const info = stmt.run(id)
+
+      if (info.changes > 0) {
+        console.log(`🗑️ 已删除自动回复规则: ${id}`)
+        return { success: true }
+      } else {
+        return { success: false, message: '规则不存在' }
+      }
+    } catch (error: any) {
+      console.error('❌ 删除自动回复规则失败:', error)
+      return { success: false, message: error.message }
+    }
+  }
+
+  /**
+   * 批量保存自动回复规则
+   * 使用事务确保原子性，任何一条规则保存失败都会回滚所有更改
+   */
+  saveAutoReplyRules(rules: any[]): { success: boolean; message?: string } {
+    try {
+      const saveTransaction = this.db.transaction(() => {
+        for (const rule of rules) {
+          // 直接执行数据库操作，不使用 saveAutoReplyRule（因为它会捕获异常）
+          const now = Date.now()
+          const responseContent = rule.response.type === 'random'
+            ? JSON.stringify(rule.response.content)
+            : rule.response.content
+
+          const existStmt = this.db.prepare('SELECT id FROM auto_reply_rules WHERE id = ?')
+          const exists = existStmt.get(rule.id)
+
+          if (exists) {
+            const updateStmt = this.db.prepare(`
+              UPDATE auto_reply_rules SET
+                name = ?, enabled = ?, priority = ?,
+                trigger_type = ?, trigger_value = ?,
+                response_type = ?, response_content = ?,
+                cooldown = ?, global_cooldown = ?, user_level = ?,
+                has_badge = ?, only_first_time = ?, updated_at = ?
+              WHERE id = ?
+            `)
+            updateStmt.run(
+              rule.name, rule.enabled ? 1 : 0, rule.priority || 0,
+              rule.trigger.type, rule.trigger.value,
+              rule.response.type, responseContent,
+              rule.conditions?.cooldown || 0, rule.conditions?.globalCooldown || 0,
+              rule.conditions?.userLevel ?? null,
+              rule.conditions?.hasBadge !== undefined ? (rule.conditions.hasBadge ? 1 : 0) : null,
+              rule.conditions?.onlyFirstTime ? 1 : 0, now, rule.id
+            )
+          } else {
+            const insertStmt = this.db.prepare(`
+              INSERT INTO auto_reply_rules (
+                id, name, enabled, priority, trigger_type, trigger_value,
+                response_type, response_content, cooldown, global_cooldown,
+                user_level, has_badge, only_first_time, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `)
+            insertStmt.run(
+              rule.id, rule.name, rule.enabled ? 1 : 0, rule.priority || 0,
+              rule.trigger.type, rule.trigger.value,
+              rule.response.type, responseContent,
+              rule.conditions?.cooldown || 0, rule.conditions?.globalCooldown || 0,
+              rule.conditions?.userLevel ?? null,
+              rule.conditions?.hasBadge !== undefined ? (rule.conditions.hasBadge ? 1 : 0) : null,
+              rule.conditions?.onlyFirstTime ? 1 : 0, now, now
+            )
+          }
+        }
+      })
+
+      saveTransaction()
+      console.log(`✅ 批量保存 ${rules.length} 条自动回复规则成功`)
+      return { success: true }
+    } catch (error: any) {
+      console.error('❌ 批量保存自动回复规则失败:', error)
+      return { success: false, message: error.message }
+    }
+  }
+
+  // ================= 自动回复日志管理 =================
+
+  /**
+   * 添加自动回复日志
+   */
+  addAutoReplyLog(log: any): { success: boolean; id?: string; message?: string } {
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO auto_reply_logs (
+          id, rule_id, rule_name, trigger_user_id, trigger_nickname,
+          trigger_content, reply_content, success, error, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      stmt.run(
+        log.id,
+        log.ruleId,
+        log.ruleName,
+        log.triggerUserId || null,
+        log.triggerNickname || null,
+        log.triggerContent || null,
+        log.replyContent,
+        log.success ? 1 : 0,
+        log.error || null,
+        log.timestamp || Date.now()
+      )
+      return { success: true, id: log.id }
+    } catch (error: any) {
+      console.error('❌ 添加自动回复日志失败:', error)
+      return { success: false, message: error.message }
+    }
+  }
+
+  /**
+   * 获取自动回复日志
+   */
+  getAutoReplyLogs(options?: {
+    ruleId?: string
+    limit?: number
+    offset?: number
+  }): any[] {
+    const { ruleId, limit = 100, offset = 0 } = options || {}
+
+    try {
+      let sql = 'SELECT * FROM auto_reply_logs'
+      const params: any[] = []
+
+      if (ruleId) {
+        sql += ' WHERE rule_id = ?'
+        params.push(ruleId)
+      }
+
+      sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      params.push(limit, offset)
+
+      const stmt = this.db.prepare(sql)
+      const rows = stmt.all(...params) as any[]
+
+      return rows.map(row => ({
+        id: row.id,
+        ruleId: row.rule_id,
+        ruleName: row.rule_name,
+        triggerUserId: row.trigger_user_id,
+        triggerNickname: row.trigger_nickname,
+        triggerContent: row.trigger_content,
+        replyContent: row.reply_content,
+        success: row.success === 1,
+        error: row.error,
+        timestamp: row.created_at
+      }))
+    } catch (error) {
+      console.error('❌ 获取自动回复日志失败:', error)
+      return []
+    }
+  }
+
+  /**
+   * 清理自动回复日志（保留最近 N 条）
+   */
+  cleanAutoReplyLogs(keepCount: number = 1000): number {
+    try {
+      // 获取第 keepCount 条的 created_at
+      const cutoffStmt = this.db.prepare(`
+        SELECT created_at FROM auto_reply_logs 
+        ORDER BY created_at DESC 
+        LIMIT 1 OFFSET ?
+      `)
+      const cutoffRow = cutoffStmt.get(keepCount - 1) as { created_at: number } | undefined
+
+      if (!cutoffRow) {
+        return 0 // 日志数量不足，无需清理
+      }
+
+      const deleteStmt = this.db.prepare('DELETE FROM auto_reply_logs WHERE created_at < ?')
+      const info = deleteStmt.run(cutoffRow.created_at)
+
+      if (info.changes > 0) {
+        console.log(`🗑️ 已清理 ${info.changes} 条自动回复日志`)
+      }
+
+      return info.changes
+    } catch (error) {
+      console.error('❌ 清理自动回复日志失败:', error)
+      return 0
     }
   }
 }

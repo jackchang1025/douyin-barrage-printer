@@ -55,6 +55,8 @@
         <TemplateSelector />
         <!-- 打印过滤设置 -->
         <FilterSettings :is-monitoring="isMonitoring" />
+        <!-- 自动回复设置 -->
+        <AutoReplyPanel :is-monitoring="isMonitoring" />
       </div>
     </div>
   </div>
@@ -71,12 +73,15 @@ import NotificationBar from '@/components/LiveRoom/NotificationBar.vue'
 import FilterSettings from '@/components/FilterSettings.vue'
 import TemplateSelector from '@/components/LiveRoom/TemplateSelector.vue'
 import PrinterSelector from '@/components/LiveRoom/PrinterSelector.vue'
+import AutoReplyPanel from '@/components/LiveRoom/AutoReplyPanel.vue'
 import { useBarrageStore } from '@/stores/barrage'
 import { usePrinterStore } from '@/stores/printer'
+import { useAutoReplyStore } from '@/stores/autoReply'
 import { hasUserBadge } from '@/utils/barrage'
 
 const barrageStore = useBarrageStore()
 const printerStore = usePrinterStore()
+const autoReplyStore = useAutoReplyStore()
 
 // 状态变量 - 提供默认值避免 undefined 警告
 const roomUrl = ref<string>('')
@@ -353,8 +358,9 @@ const handleStart = async () => {
   startLoading.value = true
 
   try {
-    // 1. 重新加载过滤规则（确保使用最新设置）
+    // 1. 重新加载过滤规则和自动回复规则（确保使用最新设置）
     await printerStore.loadSettings()
+    await autoReplyStore.initialize()
     
     // 2. 清空之前的弹幕数据和用户编号映射
     barrageStore.clearBarrages()
@@ -560,6 +566,9 @@ const handleStop = async () => {
       clearInterval(durationTimer)
       durationTimer = null
     }
+
+    // 5. 禁用自动回复
+    await autoReplyStore.setEnabled(false)
     
     ElMessage.info('已停止监控，统计数据已保留')
   } catch (error: any) {

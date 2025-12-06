@@ -1,0 +1,247 @@
+# 抖音直播自动回复功能规则
+
+## 功能概述
+
+在 Electron 环境中，通过 CDP (Chrome DevTools Protocol) 实现抖音直播间的自动回复功能。当接收到匹配规则的弹幕时，自动在直播间聊天框中发送预设的回复消息。
+
+## 架构流程图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           自动回复完整流程                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  1. 弹幕接收                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐              │
+│  │ WebSocket    │───▶│ CDP 拦截器   │───▶│ Protobuf     │              │
+│  │ 弹幕推送     │    │ 捕获消息帧   │    │ 解析消息     │              │
+│  └──────────────┘    └──────────────┘    └──────────────┘              │
+│                                                 │                       │
+│                                                 ▼                       │
+│  2. 规则匹配                                                             │
+│  ┌──────────────────────────────────────────────────────┐              │
+│  │              auto-reply-manager.ts                    │              │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  │              │
+│  │  │ 关键词  │  │ 正则    │  │ 消息类型│  │ 条件    │  │              │
+│  │  │ 匹配    │  │ 匹配    │  │ 匹配    │  │ 检查    │  │              │
+│  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘  │              │
+│  └──────────────────────────────────────────────────────┘              │
+│                                                 │                       │
+│                                                 ▼                       │
+│  3. 队列管理                                                             │
+│  ┌──────────────────────────────────────────────────────┐              │
+│  │  回复任务队列（防止频繁发送被封禁）                    │              │
+│  │  [任务1] → [任务2] → [任务3] → ...                    │              │
+│  │  └── 全局冷却时间控制                                 │              │
+│  └──────────────────────────────────────────────────────┘              │
+│                                                 │                       │
+│                                                 ▼                       │
+│  4. CDP 发送消息                                                         │
+│  ┌──────────────────────────────────────────────────────┐              │
+│  │              cdp-auto-reply.ts                        │              │
+│  │                                                       │              │
+│  │  Step 1: 定位输入框 (contenteditable)                 │              │
+│  │      ↓                                               │              │
+│  │  Step 2: 模拟鼠标移动 + 点击聚焦                      │              │
+│  │      ↓                                               │              │
+│  │  Step 3: 清空现有内容 (Ctrl+A + Backspace)            │              │
+│  │      ↓                                               │              │
+│  │  Step 4: 模拟人类打字输入 (带随机延迟)                │              │
+│  │      ↓                                               │              │
+│  │  Step 5: 点击发送按钮 (JS 直接触发 / CDP 坐标点击)    │              │
+│  │                                                       │              │
+│  └──────────────────────────────────────────────────────┘              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## 核心模块
+
+### 1. CDP 自动回复发送器 (`electron/douyin/cdp-auto-reply.ts`)
+
+负责通过 CDP 模拟用户操作发送消息。
+
+**关键技术点：**
+
+| 问题 | 解决方案 |
+|-----|---------|
+| 输入框是 `contenteditable` | 使用 Slate 编辑器结构操作 |
+| 发送按钮是 `<svg>` 元素 | 使用 `dispatchEvent` 而非 `click()` |
+| 按钮可能在视口外 | 优先 JS 直接点击，备用坐标点击 |
+| 窗口最小化不工作 | `backgroundThrottling: false` |
+| 操作太快被检测 | 随机延迟 + 模拟鼠标轨迹 |
+
+**输入框选择器（优先级从高到低）：**
+```javascript
+const selectors = [
+  '.zone-container.editor-kit-container[contenteditable="true"]',
+  '.editor-kit-container[contenteditable="true"]',
+  '[data-slate-editor="true"][contenteditable="true"]',
+  '.webcast-chatroom___input-container [contenteditable="true"]',
+  '#chatInput [contenteditable="true"]'
+];
+```
+
+**发送按钮选择器：**
+```javascript
+const selectors = [
+  'svg.webcast-chatroom___send-btn:not(.disable)',
+  'svg.webcast-chatroom___send-btn',
+  '.webcast-chatroom___send-btn',
+  '#chatInput svg[type="button"]'
+];
+```
+
+### 2. 自动回复管理器 (`electron/douyin/auto-reply-manager.ts`)
+
+负责规则管理、弹幕匹配和队列控制。
+
+**规则结构：**
+```typescript
+interface AutoReplyRule {
+  id: string
+  name: string
+  enabled: boolean
+  priority: number
+  trigger: {
+    type: 'keyword' | 'regex' | 'type' | 'all'
+    value: string
+  }
+  response: {
+    type: 'fixed' | 'random' | 'template'
+    content: string | string[]
+    atUser?: boolean  // 是否 @ 触发用户
+  }
+  conditions?: {
+    cooldown?: number         // 用户冷却时间
+    globalCooldown?: number   // 全局冷却时间
+    onlyFirstTime?: boolean   // 仅首次触发
+  }
+}
+```
+
+**模板变量：**
+- `{nickname}` - 用户昵称
+- `{content}` - 弹幕内容
+- `{giftName}` - 礼物名称
+- `{giftCount}` - 礼物数量
+- `{level}` - 用户等级
+- `{time}` - 当前时间
+
+### 3. 监控窗口配置 (`electron/douyin/live-monitor.ts`)
+
+**关键配置：**
+```typescript
+// BrowserWindow 配置
+{
+  width: 1280,
+  height: 800,
+  minWidth: 1200,   // 防止缩小导致发送按钮不可见
+  minHeight: 700
+}
+
+// BrowserView webPreferences
+{
+  partition: 'persist:douyin',
+  backgroundThrottling: false  // 关键：禁用后台节流
+}
+```
+
+## 防检测策略
+
+### 1. 模拟人类操作
+
+```typescript
+// 随机延迟
+private randomDelay(min: number, max: number): Promise<void>
+
+// 模拟鼠标轨迹移动
+private moveMouseTo(debugger_, x, y, steps = 5): Promise<void>
+
+// 逐字符输入（带随机间隔 30-100ms）
+private humanTypeText(debugger_, text): Promise<void>
+```
+
+### 2. 发送间隔控制
+
+- 最小发送间隔：3秒（可配置）
+- 用户冷却：同一用户触发后的冷却时间
+- 全局冷却：任意触发后的冷却时间
+
+### 3. CDP vs 系统级模拟
+
+| 特性 | CDP 模拟 | 系统级模拟 |
+|-----|---------|----------|
+| 作用范围 | 仅 BrowserView 内部 | 整个操作系统 |
+| 是否移动实际鼠标 | ❌ | ✅ |
+| 是否影响其他软件 | ❌ | ✅ |
+| 窗口最小化能否工作 | ✅ | ❌ |
+
+## 发送按钮点击策略
+
+由于发送按钮是 SVG 元素，采用多级策略：
+
+```
+1. JS 直接点击（优先）
+   └── dispatchEvent 触发 MouseEvent + PointerEvent
+   
+2. 滚动到可视区域 + CDP 坐标点击（备用）
+   └── scrollIntoView + Input.dispatchMouseEvent
+   
+3. 按 Enter 键发送（最后备用）
+   └── Input.dispatchKeyEvent
+```
+
+## IPC 通信
+
+### 渲染进程 → 主进程
+
+- `autoReply:getRules` - 获取规则列表
+- `autoReply:saveRule` - 保存规则
+- `autoReply:deleteRule` - 删除规则
+- `autoReply:setEnabled` - 启用/禁用
+- `autoReply:sendTest` - 测试发送
+
+### 主进程 → 渲染进程
+
+- `autoReply:sent` - 回复已发送通知
+- `autoReply:statusChanged` - 状态变化通知
+
+## 相关文件
+
+| 文件 | 职责 |
+|-----|-----|
+| `electron/douyin/cdp-auto-reply.ts` | CDP 发送消息核心逻辑 |
+| `electron/douyin/auto-reply-manager.ts` | 规则匹配与队列管理 |
+| `electron/douyin/live-monitor.ts` | 监控窗口创建与配置 |
+| `electron/ipc/handlers.ts` | IPC 处理器注册 |
+| `electron/preload.ts` | 渲染进程 API 暴露 |
+| `src/stores/autoReply.ts` | 前端状态管理 |
+| `src/components/LiveRoom/AutoReplyPanel.vue` | 规则配置 UI |
+
+## 检查清单
+
+实现或调试自动回复功能时：
+
+- [ ] BrowserView 设置 `backgroundThrottling: false`
+- [ ] 监控窗口尺寸足够大（minWidth >= 1200）
+- [ ] 输入框选择器匹配 contenteditable 元素
+- [ ] 发送按钮使用 dispatchEvent 而非 click()
+- [ ] 排除禁用状态的发送按钮（.disable 类）
+- [ ] 发送前添加随机延迟模拟人类操作
+- [ ] 规则保存时转换为普通对象（避免 Vue Proxy）
+- [ ] @ 用户功能在回复内容前添加 `@{nickname} `
+
+## 常见问题
+
+### Q: 窗口最小化后自动回复不工作？
+A: 检查 BrowserView 的 `backgroundThrottling` 是否设置为 `false`
+
+### Q: 找到发送按钮但点击无效？
+A: 发送按钮是 SVG 元素，需要使用 dispatchEvent 触发事件
+
+### Q: 保存规则时报 "object could not be cloned"？
+A: Vue 响应式对象不能直接传递给 IPC，需要 `JSON.parse(JSON.stringify(obj))`
+
+### Q: 自动回复被抖音检测为脚本？
+A: 增加随机延迟、模拟鼠标轨迹、降低发送频率

@@ -1,0 +1,103 @@
+---
+alwaysApply: true
+---
+# 抖音直播弹幕总体流程规则
+
+## 目标
+
+在 Electron 环境中，以“加载官方直播页→复用浏览器会话→CDP 网络层拦截→本地解析→事件广播→前端展示与打印”的方式稳定获取抖音直播弹幕、礼物、点赞、进场等消息，并持久化与打印。
+
+## 流程总览
+
+1. 启动监控：渲染进程调用 `startLiveMonitoring(roomUrl)`，主进程创建 `BrowserWindow`+`BrowserView` 并加载 `https://live.douyin.com/{roomId}`，附加 CDP 拦截器。
+2. 捕获弹幕：页面内部 JS 建立到 Douyin `webcast`/`im/push` 的 WebSocket，CDP 在网络层拦截创建与每一帧。
+3. 解析消息：二进制帧（Base64）进入 Protobuf 解析器；文本帧按 JSON 尝试解析；统一转换为 `BarrageData`。
+4. 广播事件：主进程转发到所有渲染进程 `barrage:received`。
+5. 前端处理：写入 Pinia 与 SQLite，根据过滤规则自动/手动打印并展示到 UI。
+
+## 入口与窗口
+
+- 渲染 API 暴露与调用：
+  - `electron/preload.ts` → `startLiveMonitoring(roomUrl)`、`onBarrageReceived(cb)`、`stopLiveMonitoring()`
+- 直播监控生命周期：
+  - `electron/douyin/live-monitor.ts` → 创建 `BrowserWindow` 与 `BrowserView`，附加 CDP，`loadURL(loadUrl)`，管理显示/隐藏与停止。
+
+## 传输拦截（CDP）
+
+- 识别弹幕连接：
+  - 监听 `Network.webSocketCreated`，URL 包含 `webcast` 或 `im/push` 视为弹幕流。
+- 帧处理：
+  - 二进制帧（`opcode === 2`）：`payloadData` 为 Base64 → `handleBinaryBarrage`。
+  - 文本帧（`opcode === 1`）：尝试 `JSON.parse` → `handleJsonBarrage`。
+- 断线检测：
+  - 所有弹幕连接关闭后广播 `douyin:barrageDisconnected`。
+
+## 解析与类型映射
+
+- 顶层解析：
+  - PushFrame → 处理 `headers` 与 `gzip` → 若 `payloadType === 'msg'` 则 `decodeResponse` 遍历消息。
+- 弹幕类型：
+  - 输出类：`WebcastChatMessage`、`WebcastGiftMessage`、`WebcastLikeMessage`、`WebcastMemberMessage`、`WebcastSocialMessage`、`WebcastEmojiChatMessage`、`WebcastFansclubMessage`。
+  - 房间状态类（静默）：`WebcastRoomUserSeqMessage`、`WebcastRoomStatsMessage`、`WebcastControlMessage`、`WebcastRoomRankMessage` 等。
+- 标准化：
+  - 转换为 `BarrageData`（含用户标识、等级、灯牌、礼物信息等），统一供 IPC 传递与前端使用。
+
+## 事件桥接
+
+- 主进程内部总线：
+  - 解析后 `ipcMain.emit('live-barrage:data', barrage)`。
+- 渲染进程广播：
+  - 主进程监听并 `webContents.send('barrage:received', barrage)` 推送到所有窗口。
+- 渲染端订阅：
+  - `window.electronAPI.onBarrageReceived(cb)` 封装订阅和取消订阅。
+
+## 渲染侧处理与打印
+
+- 入库与状态：
+  - 收到弹幕后构造数据，写入 Pinia 列表并调用 `insertBarrage` 落库，用返回 `id` 回写。
+- 用户编号分配：
+  - 仅在通过打印过滤规则时分配用户编号，标识优先级 `displayId > shortId > userId`，持久化到 DB。
+- 自动/手动打印：
+  - 自动：`printerStore.shouldPrintBarrage(printData)` 通过后分配编号并打印，更新 `is_printed`。
+  - 手动：列表点击触发，获取/分配编号，调用打印并更新状态。
+- 展示：
+  - 聊天弹幕滚动显示；礼物/关注/进场等在底部通知栏显示最新一条。
+
+## 会话与 User-Agent
+
+- 独立会话：
+  - `BrowserView` 使用 `partition: 'persist:douyin'`。
+- UA 伪装：
+  - `session.fromPartition('persist:douyin').setUserAgent('Chrome/131...')`，覆盖页面导航、XHR/Fetch、WebSocket 握手与子资源加载。
+
+## 检查清单
+
+- [ ] 渲染端通过 `startLiveMonitoring(roomUrl)` 启动并注册 `onBarrageReceived`。
+- [ ] 主进程创建 `BrowserView`，设置 `partition` 与 `session.setUserAgent()`，随后再 `loadURL()`。
+- [ ] CDP 拦截启用 `Network.enable`，识别 `webcast`/`im/push` WebSocket，并处理二进制/文本帧。
+- [ ] Protobuf 解析支持核心弹幕与房间状态，输出标准化 `BarrageData`。
+- [ ] 事件 `live-barrage:data` → `barrage:received` 正常转发。
+- [ ] 渲染端写入 Pinia 与 SQLite，打印过滤与编号分配正确执行。
+
+## 调试验证
+
+1. 控制台日志：
+   - 监控启动、CDP 附加、WebSocket 捕获与帧计数、解析摘要、打印结果等日志均有输出。
+2. WebSocket 断线事件：
+   - 收到 `douyin:barrageDisconnected` 后给出 UI 提示，监控可继续或停止。
+3. 数据库校验：
+   - `barrages` 表包含 `room_id/user_id/short_id/display_id/user_no/nickname/type/gift_*` 等字段与索引，数据持续写入与更新。
+
+## 相关文件
+
+- `electron/preload.ts`：渲染 API 暴露与事件订阅。
+- `electron/douyin/live-monitor.ts`：直播监控窗口、CDP 附加、UA 设置与生命周期管理。
+- `electron/douyin/cdp-interceptor.ts`：CDP 事件（`webSocketCreated/FrameReceived/Closed`）与断线广播。
+- `electron/douyin/protobuf-parser-dycast.ts`：Dycast Protobuf 顶层解析与消息分类。
+- `electron/douyin/dycast-model.ts`：具体 Protobuf 模型与解码函数。
+- `electron/douyin/barrage-handler.ts`：二进制/文本弹幕处理与统一标准化。
+- `electron/ipc/handlers.ts`：主进程事件桥接，将弹幕广播到渲染进程。
+- `electron/database/sqlite.ts`：SQLite 表结构、索引与持久化操作。
+- `src/views/LiveRoom.vue`：接收弹幕、落库、过滤/打印逻辑与 UI 整合。
+- `src/components/LiveRoom/BarrageListPanel.vue`：聊天弹幕列表与手动打印入口。
+

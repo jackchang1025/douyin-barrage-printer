@@ -7,6 +7,7 @@
 import { BrowserWindow, BrowserView, ipcMain, session } from 'electron'
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 import { cdpInterceptor } from './cdp-interceptor'
+import { cdpAutoReply } from './cdp-auto-reply'
 
 // 重新导出 BarrageData 类型，保持向后兼容
 export type { BarrageData } from './barrage-handler'
@@ -83,6 +84,9 @@ export class LiveMonitor {
       // 使用 CDP 拦截器捕获 WebSocket 消息
       cdpInterceptor.attach(this.browserView)
 
+      // 附加自动回复模块（复用同一个 BrowserView 的 debugger）
+      cdpAutoReply.attach(this.browserView)
+
       // 加载页面（User-Agent 已在 session 级别设置）
       await this.browserView.webContents.loadURL(loadUrl)
 
@@ -107,6 +111,7 @@ export class LiveMonitor {
     this.monitoring = false
     this.currentRoomId = ''
     cdpInterceptor.detach()
+    cdpAutoReply.detach()
 
     // 先清理 browserView 引用，避免后续访问
     const win = this.window
@@ -159,8 +164,10 @@ export class LiveMonitor {
     if (this.window && !this.window.isDestroyed()) return
 
     this.window = new BrowserWindow({
-      width: 1024,
-      height: 768,
+      width: 1280,  // 增大宽度，确保直播间聊天区域完整显示
+      height: 800,
+      minWidth: 1200,  // 设置最小宽度，防止用户缩小窗口导致发送按钮不可见
+      minHeight: 700,
       show: true,
       title: '抖音直播监控',
       autoHideMenuBar: true,
@@ -184,6 +191,7 @@ export class LiveMonitor {
         this.monitoring = false
         this.currentRoomId = ''
         cdpInterceptor.detach()
+        cdpAutoReply.detach()
 
         // 通知渲染进程监控已停止
         const allWindows = BrowserWindow.getAllWindows()
@@ -200,7 +208,9 @@ export class LiveMonitor {
       webPreferences: {
         partition: 'persist:douyin',
         nodeIntegration: false,
-        contextIsolation: false
+        contextIsolation: false,
+        // 禁用后台节流，确保窗口最小化时仍能正常接收消息和执行自动回复
+        backgroundThrottling: false
       }
     })
 

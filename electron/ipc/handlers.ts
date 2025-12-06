@@ -4,6 +4,8 @@ import { machineIdSync } from 'node-machine-id'
 import Store from 'electron-store'
 import { liveMonitor, type BarrageData } from '../douyin/live-monitor'
 import { printerService, type PrintOptions, type BarragePrintData } from '../printer'
+import { autoReplyManager } from '../douyin/auto-reply-manager'
+import { cdpAutoReply } from '../douyin/cdp-auto-reply'
 
 const store = new Store()
 
@@ -431,6 +433,114 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
     ipcMain.handle('printer:isConnected', async () => {
         return printerService.isConnected()
     })
+
+    // ==================== 自动回复相关 ====================
+
+    /**
+     * 获取所有自动回复规则
+     */
+    ipcMain.handle('autoReply:getRules', () => {
+        return sqliteManager.getAutoReplyRules()
+    })
+
+    /**
+     * 获取单个自动回复规则
+     */
+    ipcMain.handle('autoReply:getRule', (_event, id: string) => {
+        return sqliteManager.getAutoReplyRule(id)
+    })
+
+    /**
+     * 保存自动回复规则
+     */
+    ipcMain.handle('autoReply:saveRule', (_event, rule: any) => {
+        const result = sqliteManager.saveAutoReplyRule(rule)
+        if (result.success) {
+            // 更新内存中的规则
+            const rules = sqliteManager.getAutoReplyRules()
+            autoReplyManager.setRules(rules)
+        }
+        return result
+    })
+
+    /**
+     * 删除自动回复规则
+     */
+    ipcMain.handle('autoReply:deleteRule', (_event, id: string) => {
+        const result = sqliteManager.deleteAutoReplyRule(id)
+        if (result.success) {
+            // 更新内存中的规则
+            const rules = sqliteManager.getAutoReplyRules()
+            autoReplyManager.setRules(rules)
+        }
+        return result
+    })
+
+    /**
+     * 批量保存自动回复规则
+     */
+    ipcMain.handle('autoReply:saveRules', (_event, rules: any[]) => {
+        const result = sqliteManager.saveAutoReplyRules(rules)
+        if (result.success) {
+            // 更新内存中的规则
+            const loadedRules = sqliteManager.getAutoReplyRules()
+            autoReplyManager.setRules(loadedRules)
+        }
+        return result
+    })
+
+    /**
+     * 启用/禁用自动回复
+     */
+    ipcMain.handle('autoReply:setEnabled', (_event, enabled: boolean) => {
+        autoReplyManager.setEnabled(enabled)
+        return { success: true, enabled }
+    })
+
+    /**
+     * 获取自动回复状态
+     */
+    ipcMain.handle('autoReply:getStatus', () => {
+        return autoReplyManager.getStatus()
+    })
+
+    /**
+     * 手动发送自动回复消息（用于测试）
+     */
+    ipcMain.handle('autoReply:sendMessage', async (_event, content: string) => {
+        const result = await autoReplyManager.sendManual(content)
+        return result
+    })
+
+    /**
+     * 获取自动回复发送日志
+     */
+    ipcMain.handle('autoReply:getLogs', (_event, options?: { ruleId?: string; limit?: number; offset?: number }) => {
+        return sqliteManager.getAutoReplyLogs(options)
+    })
+
+    /**
+     * 清理自动回复日志
+     */
+    ipcMain.handle('autoReply:cleanLogs', (_event, keepCount?: number) => {
+        const count = sqliteManager.cleanAutoReplyLogs(keepCount)
+        return { success: true, deletedCount: count }
+    })
+
+    /**
+     * 设置自动回复发送间隔
+     */
+    ipcMain.handle('autoReply:setInterval', (_event, ms: number) => {
+        cdpAutoReply.setMinInterval(ms)
+        return { success: true, interval: ms }
+    })
+
+    // 初始化时加载自动回复规则到内存
+    const autoReplyRules = sqliteManager.getAutoReplyRules()
+    autoReplyManager.setRules(autoReplyRules)
+    // 设置 SQLiteManager 用于持久化日志
+    autoReplyManager.setSqliteManager(sqliteManager)
+    console.log(`✅ 已加载 ${autoReplyRules.length} 条自动回复规则`)
 
     // ==================== 心跳检测相关 ====================
 

@@ -139,6 +139,21 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>
   dismissUpdate: () => Promise<{ success: boolean }>
   onUpdateStatus: (callback: (status: UpdateState) => void) => () => void
+
+  // 自动回复
+  getAutoReplyRules: () => Promise<AutoReplyRule[]>
+  getAutoReplyRule: (id: string) => Promise<AutoReplyRule | null>
+  saveAutoReplyRule: (rule: AutoReplyRule) => Promise<{ success: boolean; id?: string; message?: string }>
+  deleteAutoReplyRule: (id: string) => Promise<{ success: boolean; message?: string }>
+  saveAutoReplyRules: (rules: AutoReplyRule[]) => Promise<{ success: boolean; message?: string }>
+  setAutoReplyEnabled: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean }>
+  getAutoReplyStatus: () => Promise<AutoReplyStatus>
+  sendAutoReplyMessage: (content: string) => Promise<{ success: boolean; error?: string }>
+  getAutoReplyLogs: (options?: { ruleId?: string; limit?: number; offset?: number }) => Promise<AutoReplySendLog[]>
+  cleanAutoReplyLogs: (keepCount?: number) => Promise<{ success: boolean; deletedCount: number }>
+  setAutoReplyInterval: (ms: number) => Promise<{ success: boolean; interval: number }>
+  onAutoReplySent: (callback: (data: AutoReplySentEvent) => void) => () => void
+  onAutoReplyStatusChanged: (callback: (data: AutoReplyStatusChangedEvent) => void) => () => void
 }
 
 // 弹幕
@@ -474,6 +489,80 @@ export interface UpdateState {
   currentVersion?: string
   newVersion?: string
   isUpdateReady?: boolean
+}
+
+// ==================== 自动回复类型 ====================
+
+// 触发类型
+export type AutoReplyTriggerType = 'keyword' | 'regex' | 'type' | 'all'
+
+// 回复类型
+export type AutoReplyResponseType = 'fixed' | 'random' | 'template'
+
+// 自动回复规则
+export interface AutoReplyRule {
+  id: string
+  name: string
+  enabled: boolean
+  priority: number
+  trigger: {
+    type: AutoReplyTriggerType
+    value: string
+  }
+  response: {
+    type: AutoReplyResponseType
+    content: string | string[]
+    atUser?: boolean     // 是否 @ 触发用户（默认 true）
+  }
+  conditions?: {
+    cooldown?: number
+    globalCooldown?: number
+    userLevel?: number
+    hasBadge?: boolean
+    onlyFirstTime?: boolean
+  }
+  createdAt?: number
+  updatedAt?: number
+}
+
+// 自动回复状态
+export interface AutoReplyStatus {
+  enabled: boolean
+  rulesCount: number
+  enabledRulesCount: number
+  queueLength: number
+  logsCount: number
+}
+
+// 自动回复发送日志
+export interface AutoReplySendLog {
+  id: string
+  ruleId: string
+  ruleName: string
+  triggerUserId?: string
+  triggerNickname?: string
+  triggerContent?: string
+  replyContent: string
+  success: boolean
+  error?: string
+  timestamp: number
+}
+
+// 自动回复发送事件
+export interface AutoReplySentEvent {
+  ruleName: string
+  triggerNickname: string
+  content: string
+  success: boolean
+  error?: string
+  timestamp: number
+}
+
+// 自动回复状态变化事件
+export interface AutoReplyStatusChangedEvent {
+  enabled: boolean
+  rulesCount: number
+  timestamp: number
 }
 
 // 全局声明

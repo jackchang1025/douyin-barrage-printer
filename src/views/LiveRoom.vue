@@ -47,16 +47,9 @@
         </div>
       </div>
 
-      <!-- 右侧：打印设置 -->
+      <!-- 右侧：设置面板 -->
       <div class="right-panel custom-scrollbar">
-        <!-- 打印机选择器 -->
-        <PrinterSelector />
-        <!-- 模板选择器 -->
-        <TemplateSelector />
-        <!-- 打印过滤设置 -->
-        <FilterSettings :is-monitoring="isMonitoring" />
-        <!-- 自动回复设置 -->
-        <AutoReplyPanel :is-monitoring="isMonitoring" />
+        <RightPanelSettings :is-monitoring="isMonitoring" />
       </div>
     </div>
   </div>
@@ -70,10 +63,7 @@ import MonitorControlPanel from '@/components/LiveRoom/MonitorControlPanel.vue'
 import LiveRoomStats from '@/components/LiveRoom/LiveRoomStats.vue'
 import BarrageListPanel from '@/components/LiveRoom/BarrageListPanel.vue'
 import NotificationBar from '@/components/LiveRoom/NotificationBar.vue'
-import FilterSettings from '@/components/FilterSettings.vue'
-import TemplateSelector from '@/components/LiveRoom/TemplateSelector.vue'
-import PrinterSelector from '@/components/LiveRoom/PrinterSelector.vue'
-import AutoReplyPanel from '@/components/LiveRoom/AutoReplyPanel.vue'
+import RightPanelSettings from '@/components/LiveRoom/RightPanelSettings.vue'
 import { useBarrageStore } from '@/stores/barrage'
 import { usePrinterStore } from '@/stores/printer'
 import { useAutoReplyStore } from '@/stores/autoReply'
@@ -742,8 +732,8 @@ onUnmounted(() => {
 .content {
   flex: 1;
   display: flex;
-  gap: 24px; /* 增加间距 */
-  padding: 24px; /* 增加内边距 */
+  gap: 16px;
+  padding: 16px;
   overflow: hidden;
   max-width: 1920px;
   margin: 0 auto;
@@ -753,13 +743,13 @@ onUnmounted(() => {
 
 /* ===== 左侧面板 ===== */
 .left-panel {
-  width: 320px;
+  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   overflow-y: auto;
-  padding-right: 4px; /* 防止滚动条遮挡 */
+  padding-right: 4px;
 }
 
 /* ===== 中间弹幕面板 ===== */
@@ -767,18 +757,15 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   overflow: hidden;
-  min-width: 0; /* 防止flex子项溢出 */
+  min-width: 0;
 }
 
 /* ===== 右侧面板 ===== */
 .right-panel {
-  width: 340px;
+  width: 320px;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
   overflow-y: auto;
-  padding-right: 4px; /* 防止滚动条遮挡 */
+  padding-right: 4px;
 }
 
 /* 自定义滚动条 */
@@ -826,11 +813,24 @@ onUnmounted(() => {
 
 /* ===== 响应式 ===== */
 @media (max-width: 1400px) {
+  .content {
+    gap: 12px;
+    padding: 12px;
+  }
   .left-panel {
-    width: 300px;
+    width: 260px;
   }
   .right-panel {
-    width: 320px;
+    width: 300px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .left-panel {
+    width: 240px;
+  }
+  .right-panel {
+    width: 280px;
   }
 }
 </style>

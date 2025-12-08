@@ -9,6 +9,18 @@
       </template>
 
       <div class="form-body">
+        <!-- Token 失效提示（单点登录检测） -->
+        <el-alert
+          v-if="showTokenInvalidAlert"
+          title="登录已失效"
+          type="warning"
+          description="您的账号已在其他设备登录，请重新登录"
+          show-icon
+          :closable="true"
+          class="token-invalid-alert"
+          @close="showTokenInvalidAlert = false"
+        />
+
         <!-- 登录方式切换 -->
         <div class="mode-switch">
           <el-radio-group v-model="loginMode" class="login-type-group">
@@ -25,15 +37,6 @@
           size="large"
           class="login-form"
         >
-          <el-alert
-            v-if="serverError"
-            type="error"
-            :title="serverError"
-            :closable="false"
-            show-icon
-            style="margin-bottom: 12px"
-          />
-
           <!-- 手机号码（含国家码选择） -->
           <el-form-item label="手机号码" prop="phone">
             <CountryPhoneInput 
@@ -108,24 +111,44 @@
         </el-form>
       </div>
     </el-card>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted, inject } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import CountryPhoneInput from '@/components/CountryPhoneInput.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+
+// 注入 App.vue 提供的显示订阅过期对话框方法
+const showSubscriptionExpired = inject<() => void>('showSubscriptionExpired')
 
 // 表单引用
 const formRef = ref<FormInstance>()
 const loginMode = ref<'password'|'code'>('password')
-const serverError = ref('')
+
+
+// Token 失效提示
+const showTokenInvalidAlert = ref(false)
+
+// 检查是否因 Token 失效跳转到登录页
+onMounted(() => {
+  if (route.query.tokenInvalid === '1') {
+    showTokenInvalidAlert.value = true
+    // 清除 URL 中的 tokenInvalid 参数
+    router.replace({
+      path: route.path,
+      query: { ...route.query, tokenInvalid: undefined }
+    })
+  }
+})
 
 // 登录表单
 const form = reactive({
@@ -175,6 +198,34 @@ const rules: FormRules = {
 }
 
 /**
+ * 处理登录成功后的订阅检查
+ */
+const handleLoginSuccess = (result: any) => {
+  console.log('📝 登录成功，检查订阅状态:', result.subscription)
+  
+  // 先跳转到 dashboard
+  router.push('/dashboard')
+  
+  // 检查订阅是否过期
+  if (result.subscription?.is_expired) {
+    console.warn('⚠️ 登录后检测到订阅已过期')
+    
+    // 延迟触发，确保页面已跳转
+    setTimeout(() => {
+      // 优先使用全局的不可关闭对话框
+      if (showSubscriptionExpired) {
+        console.log('📢 调用全局订阅过期对话框')
+        showSubscriptionExpired()
+      } else {
+        // 备用：触发全局事件
+        console.log('📢 触发 subscription:expired 事件')
+        window.dispatchEvent(new CustomEvent('subscription:expired'))
+      }
+    }, 300)
+  }
+}
+
+/**
  * 处理登录
  */
 const handlePhonePasswordLogin = async () => {
@@ -186,10 +237,9 @@ const handlePhonePasswordLogin = async () => {
     const result = await authStore.loginWithPhone(form.countryCode, form.phone, form.password)
 
     if (result.success) {
-      router.push('/dashboard')
+      handleLoginSuccess(result)
     } else {
-      serverError.value = result.message || '登录失败，请稍后重试'
-      ElMessage.error(serverError.value)
+      ElMessage.error(result.message || '登录失败，请稍后重试')
     }
   })
 }
@@ -239,10 +289,9 @@ const handleCodeLogin = async () => {
   if (!valid) return
   const result = await authStore.loginWithCode(form.countryCode, form.phone, form.code)
   if (result.success) {
-    router.push('/dashboard')
+    handleLoginSuccess(result)
   } else {
-    serverError.value = result.message || '登录失败，请稍后重试'
-    ElMessage.error(serverError.value)
+    ElMessage.error(result.message || '登录失败，请稍后重试')
   }
 }
 
@@ -252,7 +301,6 @@ const goRegister = () => {
 
 watch(() => loginMode.value, () => {
   form.code = ''
-  serverError.value = ''
 })
 </script>
 
@@ -384,5 +432,10 @@ watch(() => loginMode.value, () => {
 .fade-slide-leave-from {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Token 失效提示样式 */
+.token-invalid-alert {
+  margin-bottom: 20px;
 }
 </style>

@@ -87,6 +87,9 @@
       </el-main>
     </el-container>
     </div>
+
+    <!-- 订阅信息对话框 -->
+    <SubscriptionDialog v-model="showSubscriptionDialog" />
   </div>
 </template>
 
@@ -95,6 +98,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import SubscriptionDialog from '@/components/SubscriptionDialog.vue'
 import {
   HomeFilled,
   Document,
@@ -119,6 +123,9 @@ const pageTitle = computed(() => props.title || getDefaultTitle())
 
 // 直播监控窗口状态
 const liveRoomStatus = ref({ isOpen: false, isMonitoring: false })
+
+// 订阅对话框状态
+const showSubscriptionDialog = ref(false)
 
 // 根据路由获取默认标题
 function getDefaultTitle(): string {
@@ -185,21 +192,10 @@ async function handleOpenLiveRoom() {
 }
 
 /**
- * 检查订阅状态
+ * 打开订阅状态对话框
  */
-async function handleCheckSubscription() {
-  const subscription = await authStore.checkSubscription()
-
-  if (subscription) {
-    const status = subscription.active ? '有效' : '已过期'
-    const expiry = new Date(subscription.expiry_date).toLocaleDateString()
-
-    ElMessageBox.alert(
-      `套餐类型: ${subscription.plan}\n状态: ${status}\n到期时间: ${expiry}`,
-      '订阅信息',
-      { confirmButtonText: '确定' }
-    )
-  }
+function handleCheckSubscription() {
+  showSubscriptionDialog.value = true
 }
 
 /**

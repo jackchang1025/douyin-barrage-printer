@@ -6,6 +6,7 @@ import { liveMonitor, type BarrageData } from '../douyin/live-monitor'
 import { printerService, type PrintOptions, type BarragePrintData } from '../printer'
 import { autoReplyManager } from '../douyin/auto-reply-manager'
 import { cdpAutoReply } from '../douyin/cdp-auto-reply'
+import { liveRoomWindowManager } from '../window/live-room-window'
 
 const store = new Store()
 
@@ -541,6 +542,43 @@ export function setupIpcHandlers(sqliteManager: SQLiteManager) {
     // 设置 SQLiteManager 用于持久化日志
     autoReplyManager.setSqliteManager(sqliteManager)
     console.log(`✅ 已加载 ${autoReplyRules.length} 条自动回复规则`)
+
+    // ==================== 登出处理相关 ====================
+
+    /**
+     * 处理用户登出
+     * 关闭直播监控窗口、停止监控、广播登出事件
+     */
+    ipcMain.handle('auth:logout', async () => {
+        console.log('🔴 收到登出请求，开始清理...')
+
+        try {
+            // 1. 停止直播监控（关闭 BrowserView）
+            await liveMonitor.stop()
+            console.log('✅ 直播监控已停止')
+
+            // 2. 关闭直播监控窗口（LiveRoom.vue 所在的窗口）
+            liveRoomWindowManager.close()
+            console.log('✅ 直播监控窗口已关闭')
+
+            // 3. 禁用自动回复
+            autoReplyManager.setEnabled(false)
+            console.log('✅ 自动回复已禁用')
+
+            // 4. 广播登出事件给所有窗口（让各窗口自行处理清理逻辑）
+            BrowserWindow.getAllWindows().forEach(window => {
+                if (!window.isDestroyed()) {
+                    window.webContents.send('auth:loggedOut', { timestamp: Date.now() })
+                }
+            })
+            console.log('✅ 登出事件已广播')
+
+            return { success: true, message: '已清理所有监控资源' }
+        } catch (error: any) {
+            console.error('❌ 登出处理失败:', error)
+            return { success: false, message: error.message || '清理失败' }
+        }
+    })
 
     // ==================== 心跳检测相关 ====================
 

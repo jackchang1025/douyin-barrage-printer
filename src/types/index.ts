@@ -125,6 +125,10 @@ export interface ElectronAPI {
   startHeartbeat: () => Promise<any>
   stopHeartbeat: () => Promise<any>
 
+  // 登出处理
+  handleLogout: () => Promise<{ success: boolean; message: string }>
+  onLoggedOut: (callback: (data: { timestamp: number }) => void) => () => void
+
   // 窗口管理
   openLiveRoomWindow: () => Promise<{ success: boolean; message: string }>
   closeLiveRoomWindow: () => Promise<{ success: boolean; message: string }>

@@ -16,25 +16,28 @@
         size="large"
         class="auth-form"
       >
-        <el-alert
-          v-if="serverErrors.general"
-          type="error"
-          :title="serverErrors.general"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 12px"
-        />
+        <!-- 错误提示 -->
+        <transition name="alert-fade">
+          <el-alert
+            v-if="serverError"
+            type="error"
+            :title="serverError"
+            :closable="true"
+            show-icon
+            class="error-alert"
+            @close="serverError = ''"
+          />
+        </transition>
 
         <!-- 手机号码（含国家码选择） -->
-        <el-form-item label="手机号码" prop="phone" :error="serverErrors.phone">
+        <el-form-item label="手机号码" prop="phone">
           <CountryPhoneInput 
             v-model="form.phone" 
             v-model:countryCode="form.countryCode"
-            @update:modelValue="serverErrors.phone = ''"
           />
         </el-form-item>
 
-        <el-form-item label="密码" prop="password" :error="serverErrors.password">
+        <el-form-item label="密码" prop="password">
           <el-input
             v-model="form.password"
             type="password"
@@ -56,13 +59,15 @@
           />
         </el-form-item>
 
-        <el-form-item label="手机验证码" prop="code" :error="serverErrors.code">
+        <el-form-item label="手机验证码" prop="code">
           <div class="code-input-group">
             <el-input 
               v-model="form.code" 
-              placeholder="请输入验证码" 
+              placeholder="请输入6位数字验证码" 
               :prefix-icon="Message"
-              clearable 
+              :maxlength="6"
+              clearable
+              @input="form.code = form.code.replace(/\D/g, '')"
             />
             <el-button 
               class="send-code-btn"
@@ -100,6 +105,7 @@
 import { reactive, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+// ElMessage 仅用于成功提示
 import { Lock, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import CountryPhoneInput from '@/components/CountryPhoneInput.vue'
@@ -108,6 +114,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
+const serverError = ref('')
 const form = reactive({
   countryCode: '+86',
   phone: '',
@@ -116,12 +123,6 @@ const form = reactive({
   code: '',
 })
 
-const serverErrors = reactive({
-  phone: '',
-  password: '',
-  code: '',
-  general: '',
-})
 
 const rules: FormRules = {
   phone: [
@@ -193,7 +194,7 @@ const handleSendCode = async () => {
   if (res.success) {
     startCountdown()
   } else {
-    ElMessage.error(res.message || '发送验证码失败')
+    serverError.value = res.message || '发送验证码失败'
   }
 }
 
@@ -210,23 +211,10 @@ const handleRegister = async () => {
     })
 
     if (result.success) {
+      ElMessage.success('注册成功，请登录')
       router.push('/login')
     } else {
-      serverErrors.phone = ''
-      serverErrors.password = ''
-      serverErrors.code = ''
-      serverErrors.general = ''
-      const msg = result.message || '注册失败'
-      if (msg.includes('验证码')) {
-        serverErrors.code = msg
-      } else if (msg.includes('手机') || msg.includes('号码')) {
-        serverErrors.phone = msg
-      } else if (msg.includes('密码')) {
-        serverErrors.password = msg
-      } else {
-        serverErrors.general = msg
-      }
-      ElMessage.error(msg)
+      serverError.value = result.message || '注册失败'
     }
   })
 }
@@ -235,9 +223,11 @@ const goLogin = () => {
   router.push('/login')
 }
 
-watch(() => form.phone, () => { serverErrors.phone = '' })
-watch(() => form.password, () => { serverErrors.password = '' })
-watch(() => form.code, () => { serverErrors.code = '' })
+// 输入时清除错误提示
+watch(() => form.phone, () => { serverError.value = '' })
+watch(() => form.password, () => { serverError.value = '' })
+watch(() => form.confirmPassword, () => { serverError.value = '' })
+watch(() => form.code, () => { serverError.value = '' })
 </script>
 
 <style scoped>
@@ -310,5 +300,23 @@ watch(() => form.code, () => { serverErrors.code = '' })
 
 :deep(.el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px #6a88ff inset !important;
+}
+
+/* 错误提示样式 */
+.error-alert {
+  margin-bottom: 16px;
+  border-radius: 8px;
+}
+
+/* 错误提示动画 */
+.alert-fade-enter-active,
+.alert-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.alert-fade-enter-from,
+.alert-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

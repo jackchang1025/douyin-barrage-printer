@@ -617,6 +617,8 @@ let unsubscribeMonitoringStopped: (() => void) | null = null
 let unsubscribeBarrageDisconnected: (() => void) | null = null
 // 模板更新事件的取消订阅函数（跨窗口同步）
 let unsubscribeTemplateUpdated: (() => void) | null = null
+// 登出事件的取消订阅函数（跨窗口同步）
+let unsubscribeLoggedOut: (() => void) | null = null
 
 // 组件挂载时检查监控状态
 onMounted(async () => {
@@ -688,6 +690,15 @@ onMounted(async () => {
         
         console.log('✅ 模板已同步更新')
       })
+
+      // 监听登出事件（跨窗口同步）
+      // 当用户在主窗口退出登录时，此窗口会收到通知
+      // 注意：主进程的 handleLogout 已经会关闭此窗口，这里主要是做日志记录
+      unsubscribeLoggedOut = window.electronAPI.onLoggedOut((data) => {
+        console.log(`📢 收到登出事件: timestamp=${data.timestamp}`)
+        console.log('🔴 用户已登出，窗口将被关闭')
+        // 窗口会被主进程关闭，这里不需要额外操作
+      })
     } catch (error) {
       console.error('获取监控状态失败:', error)
     }
@@ -716,6 +727,12 @@ onUnmounted(() => {
   if (unsubscribeTemplateUpdated) {
     unsubscribeTemplateUpdated()
     unsubscribeTemplateUpdated = null
+  }
+
+  // 取消登出事件监听
+  if (unsubscribeLoggedOut) {
+    unsubscribeLoggedOut()
+    unsubscribeLoggedOut = null
   }
 })
 </script>

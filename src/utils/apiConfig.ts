@@ -58,10 +58,15 @@ export const API_ENDPOINTS = {
         SEND_CODE: '/auth/send-code',
         LOGIN_PHONE: '/auth/login-phone',
         LOGIN_CODE: '/auth/login-code',
+        VALIDATE_TOKEN: '/auth/validate-token',
     },
     // 订阅相关
     SUBSCRIPTION: {
         CHECK: '/subscription/check',
+    },
+    // 设置相关
+    SETTINGS: {
+        CONTACT: '/settings/contact',
     },
 } as const
 

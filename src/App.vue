@@ -8,28 +8,46 @@
         <component :is="Component" />
       </transition>
     </router-view>
+
+    <!-- 订阅过期强制提示对话框（不可关闭） -->
+    <SubscriptionDialog 
+      v-model="showSubscriptionExpiredDialog"
+      :expired-mode="true"
+    />
   </el-config-provider>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, provide } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import { useAuthStore } from '@/stores/auth'
 import UpdateNotification from '@/components/UpdateNotification.vue'
+import SubscriptionDialog from '@/components/SubscriptionDialog.vue'
 
-const authStore = useAuthStore()
+console.log('🎯 App.vue: script setup 执行')
 
-onMounted(async () => {
-  // 检查是否是独立窗口页面（如直播监控）
-  // 独立窗口通过主窗口打开，主窗口已经验证过登录状态
-  // 独立窗口只需要使用 localStorage 中的缓存数据，无需再次验证
-  const isIndependentWindow = window.location.hash.includes('/live-room')
-  
-  if (!isIndependentWindow) {
-    // 主窗口：恢复会话并验证 token
-    await authStore.restoreSession()
-  }
-  // 独立窗口：store 初始化时已从 localStorage 恢复状态，无需额外操作
+// 订阅过期对话框状态
+const showSubscriptionExpiredDialog = ref(false)
+
+// 提供给子组件的方法
+provide('showSubscriptionExpired', () => {
+  showSubscriptionExpiredDialog.value = true
+})
+
+// 监听订阅过期事件（由 startupCheck.ts 触发）
+const handleSubscriptionExpired = () => {
+  console.log('📢 App.vue: 收到订阅过期事件，显示续费对话框')
+  showSubscriptionExpiredDialog.value = true
+}
+
+onMounted(() => {
+  console.log('🎯 App.vue: onMounted 触发')
+  // 监听自定义事件
+  window.addEventListener('subscription:expired', handleSubscriptionExpired)
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  window.removeEventListener('subscription:expired', handleSubscriptionExpired)
 })
 </script>
 

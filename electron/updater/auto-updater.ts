@@ -7,15 +7,19 @@
  * 2. 发现新版本时通过 IPC 通知渲染进程
  * 3. 渲染进程显示现代化的更新通知卡片
  * 4. 用户在前端 UI 中选择操作
+ * 
+ * 更新源：使用自建服务器（通过环境变量 VITE_UPDATE_SERVER_URL 配置）
  */
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater'
 import { app, BrowserWindow, ipcMain } from 'electron'
-import path from 'path'
 import log from 'electron-log'
 
 // 配置日志
 log.transports.file.level = 'info'
 autoUpdater.logger = log
+
+// 更新服务器地址（从环境变量读取，打包时会嵌入）
+const UPDATE_SERVER_URL = import.meta.env.VITE_UPDATE_SERVER_URL || ''
 
 // 更新状态
 export type UpdateStatus =
@@ -61,8 +65,20 @@ class AutoUpdaterManager {
     // 退出时自动安装（如果已下载）
     autoUpdater.autoInstallOnAppQuit = true
 
-    // 注意：开发环境不配置更新，只有打包后才能检查更新
-    // 打包后会自动使用 app-update.yml
+    // 配置更新源
+    if (app.isPackaged && UPDATE_SERVER_URL) {
+      // 移除末尾斜杠，避免 URL 拼接出现双斜杠
+      const baseUrl = UPDATE_SERVER_URL.replace(/\/+$/, '')
+      const feedUrl = `${baseUrl}/api/app`
+      console.log('📡 使用自建更新服务器:', feedUrl)
+      autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: feedUrl,
+      })
+    } else if (app.isPackaged) {
+      // 回退到 GitHub（如果没有配置自建服务器）
+      console.log('📡 使用 GitHub Releases 更新源')
+    }
   }
 
   /**

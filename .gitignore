@@ -31,10 +31,16 @@ release
 *.db-shm
 *.db-wal
 
-# Environment variables
+# Environment variables (包含敏感信息，不提交到版本控制)
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+
+# 示例配置文件（可以提交）
+!.env.development.example
+!.env.production.example
 
 # OS
 Thumbs.db

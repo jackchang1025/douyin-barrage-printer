@@ -581,6 +581,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     stopHeartbeat: () => ipcRenderer.invoke('system:stopHeartbeat'),
 
+    // ==================== 登出处理相关 ====================
+
+    /**
+     * 处理用户登出
+     * 关闭直播监控窗口、停止监控、清理资源
+     */
+    handleLogout: () => ipcRenderer.invoke('auth:logout'),
+
+    /**
+     * 监听登出事件（跨窗口同步）
+     * 当用户在主窗口登出时，此事件会被广播到所有窗口
+     */
+    onLoggedOut: (callback: (data: { timestamp: number }) => void) => {
+        const subscription = (_event: any, data: { timestamp: number }) => callback(data)
+        ipcRenderer.on('auth:loggedOut', subscription)
+        return () => {
+            ipcRenderer.removeListener('auth:loggedOut', subscription)
+        }
+    },
+
     // ==================== 窗口管理相关 ====================
 
     /**

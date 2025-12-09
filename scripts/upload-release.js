@@ -1,13 +1,13 @@
 /**
  * 上传发布版本到后台服务器（支持分块上传）
- *
+ * 
  * 使用方法：
  *   # 生产环境（推荐）
  *   npm run upload
  *   
  *   # 开发环境
  *   npm run upload:dev
- *
+ * 
  * 环境变量（通过 dotenv-cli 自动加载）：
  *   UPLOAD_SERVER_URL - 后台服务器地址，如 https://your-server.com
  *   UPLOAD_TOKEN - 上传令牌（后台 .env 中配置的 APP_UPLOAD_TOKEN）
@@ -130,9 +130,9 @@ function loadEnv() {
   console.error('   或确保配置文件中包含:')
   console.error('   - UPLOAD_SERVER_URL')
   console.error('   - UPLOAD_TOKEN')
-  process.exit(1)
-}
-
+    process.exit(1)
+  }
+  
 /**
  * 解析 .env 文件
  */
@@ -217,21 +217,21 @@ function findInstaller(version) {
     `抖音弹幕打印-Setup-${version}.exe`,
     `抖音弹幕打印 Setup ${version}.exe`,
   ]
-
+  
   for (const pattern of patterns) {
     const filePath = path.join(releaseDir, pattern)
     if (fs.existsSync(filePath)) {
       return filePath
     }
   }
-
+  
   // 尝试查找任意匹配版本的 .exe 文件
   const files = fs.readdirSync(releaseDir)
   const exeFile = files.find(f => f.endsWith('.exe') && f.includes(version))
   if (exeFile) {
     return path.join(releaseDir, exeFile)
   }
-
+  
   return null
 }
 
@@ -332,7 +332,7 @@ async function initChunkedUpload(serverUrl, token, fileName, fileSize, version, 
 function uploadChunk(serverUrl, token, uploadId, chunkIndex, chunkData, totalChunks) {
   return new Promise((resolve, reject) => {
     const boundary = '----ChunkBoundary' + Math.random().toString(36).substr(2)
-
+    
     const header = [
       `--${boundary}`,
       `Content-Disposition: form-data; name="upload_id"`,
@@ -347,13 +347,13 @@ function uploadChunk(serverUrl, token, uploadId, chunkIndex, chunkData, totalChu
       `Content-Type: application/octet-stream`,
       '',
     ].join('\r\n') + '\r\n'
-
+    
     const footer = `\r\n--${boundary}--\r\n`
-
+    
     const url = new URL(serverUrl + '/api/app/upload/chunk')
     const isHttps = url.protocol === 'https:'
     const lib = isHttps ? https : http
-
+    
     const options = {
       hostname: url.hostname,
       port: url.port || (isHttps ? 443 : 80),
@@ -366,7 +366,7 @@ function uploadChunk(serverUrl, token, uploadId, chunkIndex, chunkData, totalChu
       },
       timeout: 5 * 60 * 1000, // 5分钟超时（单个分块）
     }
-
+    
     const req = lib.request(options, res => {
       let data = ''
       res.on('data', chunk => (data += chunk))
@@ -384,7 +384,7 @@ function uploadChunk(serverUrl, token, uploadId, chunkIndex, chunkData, totalChu
         }
       })
     })
-
+    
     req.on('timeout', () => {
       req.destroy()
       reject(new Error(`分块 ${chunkIndex + 1}/${totalChunks} 上传超时`))
@@ -573,21 +573,21 @@ async function main() {
   console.log('║                   (分块上传模式)                         ║')
   console.log('╚═════════════════════════════════════════════════════════╝')
   console.log('')
-
+  
   // 加载配置
   const env = loadEnv()
   const serverUrl = env.UPLOAD_SERVER_URL
   const token = env.UPLOAD_TOKEN
-
+  
   if (!serverUrl || !token) {
     console.error('❌ 环境变量配置不完整')
     console.error('   请确保 UPLOAD_SERVER_URL 和 UPLOAD_TOKEN 已配置')
     process.exit(1)
   }
-
+  
   // 获取版本号
   const version = getVersion()
-
+  
   // 查找安装包
   const installerPath = findInstaller(version)
   if (!installerPath) {
@@ -595,19 +595,19 @@ async function main() {
     console.error('   请先运行 npm run pack:win 或 npm run pack:win:dev')
     process.exit(1)
   }
-
+  
   const fileSize = fs.statSync(installerPath).size
 
   console.log('📋 版本信息:')
   console.log(`   版本号: ${version}`)
   console.log(`   安装包: ${path.basename(installerPath)}`)
   console.log(`   文件大小: ${formatSize(fileSize)}`)
-
+  
   // 计算 SHA512
   console.log('\n🔐 计算文件 SHA512 校验值...')
   const sha512 = await calculateSha512(installerPath)
   console.log(`   ✅ SHA512: ${sha512.substring(0, 32)}...`)
-
+  
   // 上传
   console.log(`\n📡 目标服务器: ${serverUrl}`)
 

@@ -3,10 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
 const routes: RouteRecordRaw[] = [
-    {
-        path: '/',
-        redirect: '/dashboard',
-    },
+    // 独立页面（不使用 MainLayout）
     {
         path: '/login',
         name: 'Login',
@@ -20,35 +17,42 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: false, title: '注册' },
     },
     {
-        path: '/dashboard',
-        name: 'Dashboard',
-        component: () => import('@/views/Dashboard.vue'),
-        meta: { requiresAuth: true, title: '仪表盘' },
-    },
-    {
         path: '/live-room',
         name: 'LiveRoom',
         component: () => import('@/views/LiveRoom.vue'),
         meta: {
             // 子窗口不需要认证检查（由主窗口负责验证）
-            // 用户只能通过主窗口的"直播监控"按钮打开此页面，
-            // 主窗口已经验证过登录状态
             requiresAuth: false,
             isIndependentWindow: true,
             title: '直播监控'
         },
     },
+    // 主布局路由（使用 MainLayout 作为父级，子页面共享侧边栏）
     {
-        path: '/history',
-        name: 'History',
-        component: () => import('@/views/History.vue'),
-        meta: { requiresAuth: true, title: '历史记录' },
-    },
-    {
-        path: '/settings',
-        name: 'Settings',
-        component: () => import('@/views/Settings.vue'),
-        meta: { requiresAuth: true, title: '系统设置' },
+        path: '/',
+        component: () => import('@/layouts/MainLayout.vue'),
+        meta: { requiresAuth: true },
+        redirect: '/dashboard',
+        children: [
+            {
+                path: 'dashboard',
+                name: 'Dashboard',
+                component: () => import('@/views/Dashboard.vue'),
+                meta: { requiresAuth: true, title: '仪表盘' },
+            },
+            {
+                path: 'history',
+                name: 'History',
+                component: () => import('@/views/History.vue'),
+                meta: { requiresAuth: true, title: '历史记录' },
+            },
+            {
+                path: 'settings',
+                name: 'Settings',
+                component: () => import('@/views/Settings.vue'),
+                meta: { requiresAuth: true, title: '系统设置' },
+            },
+        ],
     },
 ]
 

@@ -1,6 +1,5 @@
 <template>
-  <MainLayout title="系统设置">
-    <div class="settings-page">
+  <div class="settings-page">
       <el-tabs v-model="activeTab" class="settings-tabs">
         <!-- 打印模板设置 -->
         <el-tab-pane label="打印模板" name="template">
@@ -207,7 +206,6 @@
         </el-tab-pane>
       </el-tabs>
     </div>
-  </MainLayout>
 </template>
 
 <script setup lang="ts">
@@ -216,7 +214,6 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Check, Printer, Download, Upload } from '@element-plus/icons-vue'
 import { usePrinterStore } from '@/stores/printer'
 import PrintTemplateSettings from '@/components/PrintTemplateSettings.vue'
-import MainLayout from '@/layouts/MainLayout.vue'
 import type { UpdateState } from '@/types'
 
 const printerStore = usePrinterStore()

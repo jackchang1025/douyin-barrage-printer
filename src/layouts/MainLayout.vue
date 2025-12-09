@@ -81,9 +81,13 @@
         </div>
       </el-header>
 
-      <!-- 主体内容 - 插槽 -->
+      <!-- 主体内容 - 子路由视图 -->
       <el-main>
-        <slot></slot>
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
     </div>
@@ -107,10 +111,6 @@ import {
   SwitchButton
 } from '@element-plus/icons-vue'
 
-const props = defineProps<{
-  title?: string
-}>()
-
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -118,24 +118,14 @@ const authStore = useAuthStore()
 // 当前激活的菜单
 const activeMenu = computed(() => route.path)
 
-// 页面标题
-const pageTitle = computed(() => props.title || getDefaultTitle())
+// 页面标题 - 直接使用路由 meta.title
+const pageTitle = computed(() => (route.meta.title as string) || '仪表盘')
 
 // 直播监控窗口状态
 const liveRoomStatus = ref({ isOpen: false, isMonitoring: false })
 
 // 订阅对话框状态
 const showSubscriptionDialog = ref(false)
-
-// 根据路由获取默认标题
-function getDefaultTitle(): string {
-  const titleMap: Record<string, string> = {
-    '/dashboard': '仪表盘',
-    '/history': '历史记录',
-    '/settings': '系统设置'
-  }
-  return titleMap[route.path] || '仪表盘'
-}
 
 // 获取直播监控窗口状态
 async function fetchLiveRoomStatus() {
@@ -314,6 +304,17 @@ async function handleCommand(command: string) {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* 页面切换过渡动画（仅内容区） */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.page-fade-enter-from,
+.page-fade-leave-to {
+  opacity: 0;
 }
 </style>
 

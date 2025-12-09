@@ -3,11 +3,7 @@
     <!-- 更新通知（右下角卡片式） -->
     <UpdateNotification />
     
-    <router-view v-slot="{ Component }">
-      <transition name="fade" mode="out-in">
-        <component :is="Component" />
-      </transition>
-    </router-view>
+    <router-view />
 
     <!-- 订阅过期强制提示对话框（不可关闭） -->
     <SubscriptionDialog 

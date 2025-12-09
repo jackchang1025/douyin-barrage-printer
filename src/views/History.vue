@@ -1,5 +1,4 @@
 <template>
-  <MainLayout title="历史记录">
     <div class="history-content">
       <!-- 记录数标签 -->
       <div class="record-count">
@@ -316,7 +315,6 @@
       </div>
       </div>
     </div>
-  </MainLayout>
 </template>
 
 <script setup lang="ts">
@@ -327,7 +325,6 @@ import {
   DataAnalysis, PieChart, Trophy 
 } from '@element-plus/icons-vue'
 import type { Barrage, BarrageTypeStat, UserRankingItem, Statistics } from '@/types'
-import MainLayout from '@/layouts/MainLayout.vue'
 
 // 状态
 const loading = ref(false)

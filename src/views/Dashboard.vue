@@ -1,6 +1,5 @@
 <template>
-  <MainLayout title="仪表盘">
-    <div class="stats-container">
+  <div class="stats-container">
       <!-- 统计卡片 -->
       <el-row :gutter="20">
         <el-col :span="6">
@@ -92,7 +91,6 @@
         </el-table>
       </el-card>
     </div>
-  </MainLayout>
 </template>
 
 <script setup lang="ts">
@@ -100,7 +98,6 @@ import { onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useBarrageStore } from '@/stores/barrage'
 import { usePrinterStore } from '@/stores/printer'
-import MainLayout from '@/layouts/MainLayout.vue'
 import {
   ChatDotRound,
   Printer,
